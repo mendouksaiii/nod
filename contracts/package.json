@@ -1,0 +1,62 @@
+{
+  "name": "contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:local": "hardhat test --network anvil",
+    "test:testnet": "hardhat test --network baseSepolia",
+    "deploy:local": "hardhat ignition deploy ignition/modules/ConfidentialLottery.ts --network anvil",
+    "deploy:testnet": "hardhat ignition deploy ignition/modules/ConfidentialLottery.ts --network baseSepolia",
+    "deploy:mainnet": "hardhat ignition deploy ignition/modules/ConfidentialLottery.ts --network base",
+    "deploy:token:local": "hardhat ignition deploy ignition/modules/ConfidentialToken.ts --network anvil",
+    "deploy:token:testnet": "hardhat ignition deploy ignition/modules/ConfidentialToken.ts --network baseSepolia",
+    "deploy:token:mainnet": "hardhat ignition deploy ignition/modules/ConfidentialToken.ts --network base",
+    "node": "docker compose up"
+  },
+  "devDependencies": {
+    "@inco/lightning-js": "1.0.0",
+    "@nomicfoundation/hardhat-ignition": "^0.15.0",
+    "@nomicfoundation/hardhat-ignition-viem": "^0.15.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@nomicfoundation/hardhat-viem": "^2.0.0",
+    "@types/chai": "^4.3.20",
+    "@types/chai-as-promised": "^7.1.8",
+    "@types/mocha": "^10.0.10",
+    "@types/node": ">=18.0.0",
+    "chai": "^4.5.0",
+    "hardhat": "^2.22.19",
+    "hardhat-gas-reporter": "^1.0.8",
+    "solidity-coverage": "^0.8.17",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "viem": "^2.43.5"
+  },
+  "dependencies": {
+    "@inco/lightning": "1.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
+    "dotenv": "^17.2.3"
+  },
+  "overrides": {
+    "forge-std": "github:foundry-rs/forge-std#2f05b3001ed9d74b171d17eac80b3765ce186a76",
+    "ds-test": "github:dapphub/ds-test#e282159d5170298eb2455a6c05280ab5a73a4ef0",
+    "@safe-global/safe-smart-account": "github:safe-global/safe-smart-account#dc437e8fba8b4805d76bcbd1c668c9fd3d1e83be"
+  },
+  "resolutions": {
+    "forge-std": "github:foundry-rs/forge-std#2f05b3001ed9d74b171d17eac80b3765ce186a76",
+    "ds-test": "github:dapphub/ds-test#e282159d5170298eb2455a6c05280ab5a73a4ef0",
+    "@safe-global/safe-smart-account": "github:safe-global/safe-smart-account#dc437e8fba8b4805d76bcbd1c668c9fd3d1e83be"
+  },
+  "pnpm": {
+    "overrides": {
+      "forge-std": "github:foundry-rs/forge-std#2f05b3001ed9d74b171d17eac80b3765ce186a76",
+      "ds-test": "github:dapphub/ds-test#e282159d5170298eb2455a6c05280ab5a73a4ef0",
+      "@safe-global/safe-smart-account": "github:safe-global/safe-smart-account#dc437e8fba8b4805d76bcbd1c668c9fd3d1e83be"
+    }
+  }
+}
