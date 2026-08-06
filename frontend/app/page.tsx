@@ -1,35 +1,42 @@
-import { ConfLottery } from "@/components/ConfLottery";
+import Link from "next/link";
 
-const Home = () => {
+// Placeholder landing — becomes the title screen ("the house learns your
+// name") in Section 7.
+export default function Home() {
   return (
-    <main className="min-h-[calc(100vh-65px)] flex flex-col">
-      <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-12 md:py-16">
-        <div className="mb-8 md:mb-12">
-          <h1 className="text-xl md:text-2xl font-medium text-foreground mb-2">
-            confidential lottery
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            privacy-preserving lottery with encrypted deposits using Inco
-          </p>
-        </div>
-        <ConfLottery />
-      </div>
-
-      <footer className="border-t border-border py-6">
-        <div className="max-w-4xl mx-auto px-6 flex items-center justify-between text-xs text-muted-foreground">
-          <span>built with next.js + wagmi + inco</span>
-          <a
-            href="https://docs.inco.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground transition-colors"
-          >
-            inco docs →
-          </a>
-        </div>
-      </footer>
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "1.2rem",
+        background: "#07090d",
+        color: "#9aa2b5",
+        fontFamily: "Georgia, serif",
+      }}
+    >
+      <h1 style={{ fontWeight: 400, letterSpacing: "0.5em", fontSize: "2rem" }}>
+        N O D
+      </h1>
+      <p style={{ opacity: 0.6, fontStyle: "italic", fontSize: "0.95rem" }}>
+        the stairs only go down
+      </p>
+      <Link
+        href="/game"
+        style={{
+          marginTop: "1.5rem",
+          color: "#c8d2be",
+          textDecoration: "none",
+          border: "1px solid #2a3040",
+          padding: "0.6rem 2.2rem",
+          fontSize: "0.9rem",
+          letterSpacing: "0.2em",
+        }}
+      >
+        wake
+      </Link>
     </main>
   );
-};
-
-export default Home;
+}
