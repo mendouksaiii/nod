@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Input } from "./input";
-import { Interactable } from "./room";
+import { Interactable } from "./build";
 
 // Theo: an eight-year-old made of grey boxes. Everything here is about
 // weight — slow ramps, sliding stops, a lean into acceleration, a mantle
@@ -182,6 +182,11 @@ export class Theo {
 
   get hidden(): boolean {
     return this.state === "hidden";
+  }
+
+  /** Carrying something that stinks — the pantry key gives you away. */
+  get carriesReeking(): boolean {
+    return this.carried?.tag === "reeking";
   }
 
   get speedTier(): "still" | "sneak" | "walk" | "run" {
