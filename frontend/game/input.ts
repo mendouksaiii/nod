@@ -33,8 +33,12 @@ export class Input {
     this.target = null;
   }
 
+  /** Set while a cutscene owns him — being taken, descending. */
+  frozen = false;
+
   /** -1 left, +1 right, 0 idle */
   get moveX(): number {
+    if (this.frozen) return 0;
     const left = this.down.has("KeyA") || this.down.has("ArrowLeft");
     const right = this.down.has("KeyD") || this.down.has("ArrowRight");
     if (left === right) return 0;

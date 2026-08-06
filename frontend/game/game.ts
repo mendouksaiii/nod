@@ -3,6 +3,7 @@ import { Input } from "./input";
 import { Theo } from "./theo";
 import { NodCamera } from "./camera";
 import { buildRoom, Interactable, RoomBuild } from "./room";
+import { Entity } from "./entity";
 
 // Orchestrator: scene, loop, lighting, interaction resolution, HUD DOM.
 
@@ -13,15 +14,33 @@ export class NodGame {
   private input = new Input();
   private theo: Theo;
   private room: RoomBuild;
+  private entity!: Entity;
   private clock = new THREE.Clock();
+  /** Where a caught run restarts — the last safe threshold he crossed. */
+  private checkpointX = 2.8;
+  private deathT = 0;
+  private dying = false;
   private raf = 0;
-  private hud: { battery: HTMLDivElement; prompt: HTMLDivElement; hint: HTMLDivElement };
+  private hud: {
+    battery: HTMLDivElement;
+    prompt: HTMLDivElement;
+    hint: HTMLDivElement;
+    vignette: HTMLDivElement;
+    blackout: HTMLDivElement;
+  };
   private disposed = false;
   seed = 0;
 
   /** Debug access (window.NOD.debug) — never used by game logic. */
   get debug() {
-    return { theo: this.theo, room: this.room, camera: this.cam };
+    return {
+      theo: this.theo,
+      room: this.room,
+      camera: this.cam,
+      entity: this.entity,
+      scene: this.scene,
+      THREE,
+    };
   }
 
   constructor(private container: HTMLElement) {
@@ -46,6 +65,15 @@ export class NodGame {
     this.room = buildRoom(this.scene, this.seed);
     this.theo = new Theo(this.scene);
     this.theo.position.set(this.room.spawnX, 0, 0);
+    this.checkpointX = this.room.spawnX;
+
+    // It walks the cot room through the wardrobe room. The landing and the
+    // stair antechamber are the two places on this floor it will not go.
+    this.entity = new Entity(this.scene, {
+      waypoints: [17, 30, 45, 56, 70],
+      dwellSeconds: 2.4,
+      startIndex: 2,
+    });
     this.cam = new NodCamera(container.clientWidth / container.clientHeight);
 
     this.hud = this.buildHud(container);
@@ -101,6 +129,24 @@ export class NodGame {
       textShadow: "0 1px 8px #000",
     });
 
+    // Suspicion vignette: the room darkens at its edges as it notices you.
+    // No meter, no icon — the screen itself is the tell.
+    const vignette = mk({
+      inset: "0",
+      background:
+        "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 38%, rgba(24,6,8,0.92) 100%)",
+      opacity: "0",
+      transition: "opacity 0.25s",
+    });
+
+    // Full-black wipe for being taken
+    const blackout = mk({
+      inset: "0",
+      background: "#000",
+      opacity: "0",
+      transition: "opacity 0.35s",
+    });
+
     const hint = mk({
       left: "50%",
       top: "22px",
@@ -114,7 +160,7 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  drop      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
-    return { battery: battery as HTMLDivElement, prompt, hint };
+    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout };
   }
 
   /** The nearest interactable whose trigger contains Theo, honoring priority. */
@@ -162,8 +208,10 @@ export class NodGame {
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
-    // Interaction
-    if (this.input.consume("KeyE")) {
+    // Interaction (ignored while a cutscene owns him)
+    if (this.input.frozen) {
+      this.input.endFrame();
+    } else if (this.input.consume("KeyE")) {
       if (this.theo.hidden) {
         this.theo.leaveHide();
       } else {
@@ -175,10 +223,21 @@ export class NodGame {
     if (this.input.consume("KeyF")) this.theo.toggleFlashlight();
 
     this.theo.update(dt, this.input, this.room.colliders, this.room.bounds);
+    this.entity.update(dt, this.theo, this.room.colliders, this.room.bounds);
     this.cam.update(dt, this.theo.position, this.theo.facing, this.room.camClamp);
+
+    // Safe thresholds: the landing he woke in, and the stairwell antechamber
+    if (!this.dying) {
+      if (this.theo.position.x < 11 && this.checkpointX < 11) this.checkpointX = this.room.spawnX;
+      else if (this.theo.position.x > 77) this.checkpointX = 78.5;
+    }
+
+    if (this.entity.caught && !this.dying) this.beginDeath();
+    if (this.dying) this.updateDeath(dt);
 
     // HUD
     this.hud.battery.style.width = `${this.theo.battery}%`;
+    this.hud.vignette.style.opacity = `${Math.min(1, this.entity.suspicion * 0.95)}`;
     const it = this.theo.hidden ? null : this.findInteractable();
     if (this.theo.hidden) {
       this.hud.prompt.textContent = "E — come out";
@@ -193,6 +252,33 @@ export class NodGame {
     this.input.endFrame();
     this.renderer.render(this.scene, this.cam.camera);
   };
+
+  /** It has him. Hold on the moment, wipe to black, put him back. */
+  private beginDeath() {
+    this.dying = true;
+    this.deathT = 0;
+    this.entity.caught = false;
+    this.input.frozen = true;
+    this.hud.prompt.style.opacity = "0";
+  }
+
+  private updateDeath(dt: number) {
+    this.deathT += dt;
+    if (this.deathT > 0.5) {
+      this.hud.blackout.style.opacity = "1";
+    }
+    if (this.deathT > 1.5 && this.theo.position.x !== this.checkpointX) {
+      // Respawn at the last threshold; the house resets around him
+      this.theo.respawn(this.checkpointX);
+      this.entity.reset(this.checkpointX < 40 ? 3 : 0);
+    }
+    if (this.deathT > 2.4) {
+      this.hud.blackout.style.opacity = "0";
+      this.hud.vignette.style.opacity = "0";
+      this.dying = false;
+      this.input.frozen = false;
+    }
+  }
 
   private onResize = () => {
     const w = this.container.clientWidth;

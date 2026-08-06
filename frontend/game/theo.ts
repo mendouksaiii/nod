@@ -588,6 +588,23 @@ export class Theo {
     );
   }
 
+  /** Put him back on his feet at a threshold, mid-run state cleared. */
+  respawn(x: number) {
+    this.root.position.set(x, 0, 0);
+    this.state = "move";
+    this.currentHide = null;
+    this.vx = 0;
+    this.vy = 0;
+    this.grounded = true;
+    this.squash = 0;
+    this.staggerT = 0;
+    this.body.position.y = 0;
+    this.body.rotation.set(0, 0, 0);
+    this.hipRoot.rotation.set(0, 0, 0);
+    this.neck.rotation.set(0, 0, 0);
+    if (this.carried) this.drop();
+  }
+
   toggleFlashlight() {
     this.flashOn = !this.flashOn;
   }
