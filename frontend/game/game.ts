@@ -17,6 +17,7 @@ export class NodGame {
   private raf = 0;
   private hud: { battery: HTMLDivElement; prompt: HTMLDivElement; hint: HTMLDivElement };
   private disposed = false;
+  seed = 0;
 
   /** Debug access (window.NOD.debug) — never used by game logic. */
   get debug() {
@@ -39,25 +40,12 @@ export class NodGame {
     // Base light: dim cold ambience — dark but always readable
     this.scene.add(new THREE.HemisphereLight(0x39455e, 0x141821, 1.1));
 
-    // The window's cold shaft — the floor's single sickly accent
-    const moon = new THREE.SpotLight(0x5a6f95, 320, 34, 0.62, 0.65, 1.2);
-    moon.position.set(-3.5, 11.5, 3.5);
-    moon.target.position.set(-3.5, 0, -1);
-    moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
-    moon.shadow.bias = -0.001;
-    this.scene.add(moon, moon.target);
-
-    // Soft front fills so silhouettes never drown in pure black
-    const fillR = new THREE.PointLight(0x323c52, 30, 30, 1.6);
-    fillR.position.set(9, 4.5, 5);
-    this.scene.add(fillR);
-    const fillL = new THREE.PointLight(0x2c3446, 22, 28, 1.6);
-    fillL.position.set(-11, 4, 5);
-    this.scene.add(fillL);
-
-    this.room = buildRoom(this.scene);
+    // Room lighting lives with the room itself (one source per space).
+    // Seed: locally random until the Inco run seed replaces it (Section 7).
+    this.seed = Math.floor(Math.random() * 0xffffffff);
+    this.room = buildRoom(this.scene, this.seed);
     this.theo = new Theo(this.scene);
+    this.theo.position.set(this.room.spawnX, 0, 0);
     this.cam = new NodCamera(container.clientWidth / container.clientHeight);
 
     this.hud = this.buildHud(container);
@@ -187,7 +175,7 @@ export class NodGame {
     if (this.input.consume("KeyF")) this.theo.toggleFlashlight();
 
     this.theo.update(dt, this.input, this.room.colliders, this.room.bounds);
-    this.cam.update(dt, this.theo.position, this.theo.facing, [-13.2, 13.2]);
+    this.cam.update(dt, this.theo.position, this.theo.facing, this.room.camClamp);
 
     // HUD
     this.hud.battery.style.width = `${this.theo.battery}%`;
