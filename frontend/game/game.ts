@@ -5,6 +5,8 @@ import { NodCamera } from "./camera";
 import { Entity } from "./entity";
 import { FloorBuild, FloorContext, Interactable, writing } from "./build";
 import { buildFloor, BOTTOM_FLOOR, FLOOR_TITLES, TOP_FLOOR } from "./floors";
+import { NodAudio, Surface } from "./audio";
+import { WREN_PAGES } from "./build";
 
 /**
  * What the game needs from the house on Base. Kept as an interface so the
@@ -44,6 +46,15 @@ export class NodGame {
   private raf = 0;
   private hud!: ReturnType<NodGame["buildHud"]>;
   private disposed = false;
+  private grainTimer = 0;
+  private readingPage = false;
+  audio = new NodAudio();
+  private lastEntityState = "patrol";
+  private wasPinging = false;
+  private audioState = {
+    effort: 0, dread: 0, hidden: false, entityDx: null as number | null,
+    entityHunting: false, surface: "wood" as Surface, battery: 100, flashOn: false,
+  };
 
   seed = 0;
   floorNumber = TOP_FLOOR;
@@ -101,6 +112,15 @@ export class NodGame {
 
     void this.boot();
 
+    // Browsers only allow sound after the player has touched something.
+    const wake = () => {
+      void this.audio.init().then(() => this.audio.setFloor(this.floorNumber));
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("pointerdown", wake);
+    };
+    window.addEventListener("keydown", wake);
+    window.addEventListener("pointerdown", wake);
+
     this.input.attach(window);
     window.addEventListener("resize", this.onResize);
     (window as unknown as { NOD: NodGame }).NOD = this;
@@ -149,6 +169,21 @@ export class NodGame {
     this.hasKey = false;
     this.checkpointX = this.floor.spawnX;
     this.theo.respawn(this.floor.spawnX);
+    this.audio.setFloor(n);
+    this.lastEntityState = "patrol";
+
+    // Grey-blue and almost ordinary at the top; warmer and sicker with every
+    // floor; near-monochrome cold at the bottom.
+    const GRADE: Record<number, string> = {
+      7: "rgba(150,170,205,1)",
+      6: "rgba(120,180,190,1)",
+      5: "rgba(205,175,110,1)",
+      4: "rgba(140,185,140,1)",
+      3: "rgba(210,130,110,1)",
+      2: "rgba(165,180,210,1)",
+      1: "rgba(190,195,205,1)",
+    };
+    this.hud.grade.style.background = GRADE[n] ?? GRADE[7];
     this.showCard(`floor ${n} — ${FLOOR_TITLES[n]}`);
 
     if (this.bridge) void this.renderMarks(n);
@@ -187,6 +222,7 @@ export class NodGame {
         shown++;
       }
     });
+    this.audio.remembered();
     this.showCard(
       marks.length === 1
         ? "one child stopped here"
@@ -216,6 +252,40 @@ export class NodGame {
     });
     batteryWrap.appendChild(battery);
 
+    // Per-floor colour grade. The palette warms and sickens as you descend,
+    // then goes cold and monochrome at the bottom.
+    const grade = mk({ inset: "0", mixBlendMode: "multiply", opacity: "0.3", transition: "background 2s" });
+
+    // A permanent haze in the corners — the house is never fully in focus
+    const softVignette = mk({
+      inset: "0",
+      background: "radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.6) 100%)",
+    });
+
+    // Film grain. Real grain, animated, at very low opacity — it is the
+    // difference between "3D scene" and "something being filmed".
+    const grain = document.createElement("canvas");
+    grain.width = grain.height = 128;
+    const gctx = grain.getContext("2d")!;
+    Object.assign(grain.style, {
+      position: "absolute", inset: "0", width: "100%", height: "100%",
+      pointerEvents: "none", opacity: "0.055", mixBlendMode: "overlay",
+      imageRendering: "pixelated",
+    } as CSSStyleDeclaration);
+    container.appendChild(grain);
+    const img = gctx.createImageData(128, 128);
+    const regrain = () => {
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = 90 + Math.random() * 76;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+      gctx.putImageData(img, 0, 0);
+    };
+    regrain();
+    const grainTimer = window.setInterval(regrain, 70);
+    this.grainTimer = grainTimer;
+
     const vignette = mk({
       inset: "0",
       background: "radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 38%, rgba(24,6,8,0.92) 100%)",
@@ -236,6 +306,17 @@ export class NodGame {
       textAlign: "center", width: "70%", lineHeight: "1.7",
     });
 
+    // Wren's handwriting, held up to the light
+    const page = mk({
+      left: "50%", top: "50%", transform: "translate(-50%,-50%)",
+      width: "min(30rem, 82%)", padding: "2.4rem 2.2rem",
+      background: "rgba(196,189,168,0.94)", color: "#3a3428",
+      fontFamily: "'Segoe Print','Comic Sans MS',cursive",
+      fontSize: "15px", lineHeight: "2.0", whiteSpace: "pre-line",
+      opacity: "0", transition: "opacity 0.5s", boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+      transformOrigin: "center", rotate: "-0.6deg",
+    });
+
     const prompt = mk({
       left: "50%", bottom: "48px", transform: "translateX(-50%)",
       fontSize: "15px", fontStyle: "italic", opacity: "0", textShadow: "0 1px 8px #000",
@@ -250,7 +331,7 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  throw      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
-    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout, card, sub };
+    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout, card, sub, grade, page };
   }
 
   private showCard(text: string, subtext = "", hold = 2600) {
@@ -277,9 +358,10 @@ export class NodGame {
     if (it.isKey) return 1;
     if (it.type === "hide") return 2;
     if (it.type === "lever" || it.type === "cover") return 3;
-    if (it.type === "carry") return 4;
-    if (it.type === "battery") return 5;
-    return 6;
+    if (it.type === "read") return 4;
+    if (it.type === "carry") return 5;
+    if (it.type === "battery") return 6;
+    return 7; // climb — the biggest triggers, so always last
   }
 
   private findInteractable(): Interactable | null {
@@ -318,12 +400,18 @@ export class NodGame {
       }
       case "carry":
         this.theo.pickUp(it);
-        if (it.isKey) this.hasKey = true;
+        if (it.isKey) {
+          this.hasKey = true;
+          this.audio.keyTaken();
+        } else {
+          this.audio.pickup();
+        }
         break;
       case "battery":
         this.theo.battery = 100;
         it.consumed = true;
         it.mesh?.parent?.remove(it.mesh);
+        this.audio.pickup();
         break;
       case "lever":
       case "cover":
@@ -334,11 +422,32 @@ export class NodGame {
           this.theo.carried = null;
         }
         it.onUse?.(this.floor);
+        if (it.tag === "valve") {
+          this.audio.valve();
+          this.audio.drain(6.5);
+        } else if (it.type === "cover") {
+          this.audio.mirrorCovered();
+        } else {
+          this.audio.pickup();
+        }
         if (it.type === "cover") {
           it.consumed = true;
           it.mesh?.parent?.remove(it.mesh);
         }
         break;
+      case "read": {
+        // Wren's page. The only voice in the game.
+        const page = WREN_PAGES[this.floorNumber];
+        if (page) {
+          this.readingPage = true;
+          this.hud.page.textContent = page;
+          this.hud.page.style.opacity = "1";
+          this.input.frozen = true;
+          this.audio.pickup();
+          this.audio.duck(0.45, 0.4);
+        }
+        break;
+      }
       case "door":
         if (it.tag === "settle") this.beginSettle();
         else if (it.tag === "exit") this.beginEscape();
@@ -379,6 +488,20 @@ export class NodGame {
       return;
     }
 
+    // Reading her page stops the world. Anything closes it.
+    if (this.readingPage) {
+      if (this.input.consume("KeyE") || this.input.consume("Escape") || this.input.consume("Space")) {
+        this.readingPage = false;
+        this.hud.page.style.opacity = "0";
+        this.input.frozen = false;
+        this.audio.duck(0.9, 0.6);
+      }
+      this.input.endFrame();
+      this.theo.update(dt, this.input, this.floor.colliders, this.floor.bounds);
+      this.renderer.render(this.scene, this.cam.camera);
+      return;
+    }
+
     const busy = this.dying || this.transition !== "none";
     if (busy) {
       // Waking again after the house kept you
@@ -413,6 +536,7 @@ export class NodGame {
     this.floor.update?.call(this.floor, dt, this.ctx);
     this.entity?.update(dt, this.theo, this.floor.colliders, this.floor.bounds, this.floor, this.ctx);
     this.cam.update(dt, this.theo.position, this.theo.facing, this.floor.camClamp);
+    this.updateAudio(dt);
 
     if (!busy) {
       const e = this.floor.entity;
@@ -447,6 +571,68 @@ export class NodGame {
     this.input.endFrame();
     this.renderer.render(this.scene, this.cam.camera);
   };
+
+  /** What surface he is standing on right now — the floors know. */
+  private surfaceUnderfoot(): Surface {
+    const p = new THREE.Vector3(this.theo.position.x, this.theo.position.y + 0.3, 0);
+    for (const z of this.floor.zones) {
+      if (z.active === false) continue;
+      if (!z.box.containsPoint(p)) continue;
+      if (z.kind === "water") return "water";
+      if (z.kind === "quiet" || z.kind === "soft") return "soft";
+    }
+    return this.floor.floor === 6 || this.floor.floor === 2 ? "stone" : "wood";
+  }
+
+  /**
+   * Drives the whole soundtrack from what is actually happening. Nothing
+   * here is a loop — the breathing rate is his fear, and the thing hunting
+   * you is panned to where it is standing.
+   */
+  private updateAudio(dt: number) {
+    if (!this.audio.ready) return;
+    const s = this.audioState;
+    const tier = this.theo.speedTier;
+    s.effort = tier === "run" ? 1 : tier === "walk" ? 0.55 : tier === "sneak" ? 0.2 : 0;
+    s.dread = this.entity?.suspicion ?? 0;
+    s.hidden = this.theo.hidden;
+    s.battery = this.theo.battery;
+    s.flashOn = this.theo.flashOn;
+    s.surface = this.surfaceUnderfoot();
+
+    if (this.entity) {
+      const dx = this.entity.position.x - this.theo.position.x;
+      s.entityDx = dx;
+      s.entityHunting = this.entity.state === "hunt" || this.entity.state === "seize";
+    } else {
+      s.entityDx = null;
+      s.entityHunting = false;
+    }
+
+    // Footsteps, at the moment a foot actually lands
+    if (this.theo.footfall) {
+      this.theo.footfall = false;
+      this.audio.footstep(s.surface, s.effort);
+    }
+
+    // The floor's warden changing its mind is the loudest story beat there is
+    const st = this.entity?.state ?? "patrol";
+    if (st !== this.lastEntityState) {
+      if (st === "alert") { this.audio.spotted(); this.cam.shake(0.12); }
+      else if (st === "hunt") { this.audio.hunt(); this.cam.shake(0.3); }
+      else if (st === "seize") { this.audio.caught(); this.cam.shake(0.75); }
+      this.lastEntityState = st;
+    }
+
+    // The study's sonar pulse — audible because it is the mechanic
+    if (this.entity?.sense === "echo") {
+      const pinging = this.entity.pingPhase < 0.12;
+      if (pinging && !this.wasPinging) this.audio.ping();
+      this.wasPinging = pinging;
+    }
+
+    this.audio.update(dt, s);
+  }
 
   // ── The house takes you ─────────────────────────────────────────────
 
@@ -529,6 +715,8 @@ export class NodGame {
     this.transT = 0;
     this.swapped = false;
     this.input.frozen = true;
+    this.audio.doorOpens();
+    this.audio.descend();
   }
 
   private beginSettle() {
@@ -548,6 +736,8 @@ export class NodGame {
     this.transition = "escaped";
     this.transT = 0;
     this.input.frozen = true;
+    this.audio.doorOpens();
+    this.audio.duck(0.35, 2.0);
     if (this.bridge && !this.busyWithChain) {
       this.busyWithChain = true;
       this.bridge
@@ -609,6 +799,8 @@ export class NodGame {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    clearInterval(this.grainTimer);
+    this.audio.dispose();
     this.input.detach();
     window.removeEventListener("resize", this.onResize);
     this.renderer.dispose();

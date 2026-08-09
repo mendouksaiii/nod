@@ -54,7 +54,9 @@ export class Theo {
   private idleT = 0;
   private lastFacing = 1;
   private turnT = 0;
-  private footfallPhase = 0;
+  private lastStepSign = 0;
+  /** Raised on each footfall; the game consumes it to play a step. */
+  footfall = false;
 
   private mantleFrom = new THREE.Vector3();
   private mantleTo = new THREE.Vector3();
@@ -475,6 +477,15 @@ export class Theo {
     const gait = Math.min(1, speed / SPEED_WALK);
     const stride = gait * (sneaking ? 0.34 : running ? 0.82 : 0.62);
     const sw = Math.sin(p);
+
+    // A foot lands each time the swing crosses centre
+    if (moving && this.grounded) {
+      const sign = sw >= 0 ? 1 : -1;
+      if (sign !== this.lastStepSign) {
+        this.lastStepSign = sign;
+        this.footfall = true;
+      }
+    }
 
     // ── Legs: thigh swings, trailing knee flexes to clear the floor ──
     const thigh = -sw * stride;

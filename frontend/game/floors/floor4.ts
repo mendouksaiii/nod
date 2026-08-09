@@ -43,7 +43,7 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
 
   // ── Landing (0–11) ──
   writing(group, "standing still will not save you here", 6, 4.6, 5.8, "#7f9a80");
-  journalPage(group, 8.5);
+  journalPage(group, 8.5, 0.5, interactables, 4);
   const ll = new THREE.PointLight(0x6d8a62, 75, 16, 1.6);
   ll.position.set(5, 6, 2);
   group.add(ll);

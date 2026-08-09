@@ -42,7 +42,7 @@ export function buildFloor1(scene: THREE.Scene, seed: number): FloorBuild {
 
   // ── Stair bottom (0–12): where you arrive, and the last writing ──
   writing(group, "i got this far. i am going to keep walking.", 6, 4.6, 6.4, "#9aa0aa");
-  journalPage(group, 8.8);
+  journalPage(group, 8.8, 0.5, interactables, 1);
   const ll = new THREE.PointLight(0x5c6470, 70, 16, 1.6);
   ll.position.set(5, 6, 2);
   group.add(ll);

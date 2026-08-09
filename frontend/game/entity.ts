@@ -53,6 +53,11 @@ export class Entity {
   private pingT = 0;
   private pingRadius = 0;
 
+  /** Seconds since the last echolocation pulse — the game plays it. */
+  get pingPhase() {
+    return this.pingT;
+  }
+
   private spec: EntitySpec;
   private waypoints: number[];
   private wpIndex: number;

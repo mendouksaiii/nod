@@ -9,6 +9,12 @@ export class NodCamera {
   private lookX = 0;
   private lookY = 1.4;
   private swayT = 0;
+  private shakeAmt = 0;
+
+  /** Knock the camera. Used when the house notices, and when it takes you. */
+  shake(amount: number) {
+    this.shakeAmt = Math.max(this.shakeAmt, amount);
+  }
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(38, aspect, 0.1, 80);
@@ -33,6 +39,13 @@ export class NodCamera {
       2.0,
       dt
     );
+
+    if (this.shakeAmt > 0.0005) {
+      this.shakeAmt = THREE.MathUtils.damp(this.shakeAmt, 0, 4.5, dt);
+      this.camera.position.x += (Math.random() - 0.5) * this.shakeAmt;
+      this.camera.position.y += (Math.random() - 0.5) * this.shakeAmt;
+    }
+
     this.camera.lookAt(this.lookX, this.lookY, 0);
   }
 

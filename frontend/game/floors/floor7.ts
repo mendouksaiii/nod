@@ -249,7 +249,7 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
     ctx.moveTo(146, 140); ctx.lineTo(188, 228); ctx.stroke();
   }, "it lives in the water");
   writing(group, "down is out", 84.5, 4.9, 2.8);
-  journalPage(group, 84.2);
+  journalPage(group, 84.2, 0.5, interactables, 7);
   const al = new THREE.PointLight(0x3e4a66, 100, 22, 1.5);
   al.position.set(82, 7, 2);
   group.add(al);

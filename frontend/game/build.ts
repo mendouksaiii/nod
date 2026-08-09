@@ -11,6 +11,7 @@ export type InteractableType =
   | "battery"
   | "lever" // valves, switches, things that change the room
   | "cover" // mirrors to drape, scent to mask — one-shot state changes
+  | "read" // Wren's journal
   | "door"; // the stairwell down
 
 export interface Interactable {
@@ -177,15 +178,50 @@ export function writing(
   group.add(plane);
 }
 
-/** A page torn from Wren's journal, tucked where she left it. */
-export function journalPage(group: THREE.Group, x: number, y = 0.5) {
+/**
+ * Wren got further than anyone. She left a page on every floor, tucked where
+ * she hid. Her voice is a scared eleven-year-old, not a narrator — and her
+ * last page stops mid-sentence one step from the door.
+ */
+export const WREN_PAGES: Record<number, string> = {
+  7: "there were four of us when i woke up.\ni am writing this down so the next one knows.\nit sees you move. it does not see you if you are still.\n— wren",
+  6: "tom went in the water.\ni counted to two hundred before i moved again.\nshe cannot see. she only listens.\nthrow something. she goes to the noise, not to you.",
+  5: "it does not walk a route like the others.\nit walks where i walked, about a minute late.\ni stood in the smoke for a while and it went straight past me.\ni am so hungry.",
+  4: "being still does not work here. i learned that badly.\nit makes a sound like a bat and the walls give me away.\nthe soft rooms are safe. the curtains, the books, the carpet.\nit talks in mum's voice. it is not mum.",
+  3: "DO NOT RUN ON THE THIRD.\nit is under the floor. it does not care about noise or light.\nit only knows the boards.\ni crossed the long one on the furniture and it never knew i was there.",
+  2: "i forgot my mum's face today.\ni looked in the glass to check mine and something in there\nlooked back and copied me a half second late.\ncover them. cover all of them.\nmy name is wren. i am going home.",
+  1: "there is a door at the end and there is real light under it.\nthe rooms on the way are warm and they say things\nand i am so tired.\nit's not what you think. it's —",
+};
+
+export function journalPage(
+  group: THREE.Group,
+  x: number,
+  y = 0.5,
+  interactables?: Interactable[],
+  floor?: number
+) {
   const page = new THREE.Mesh(
     new THREE.PlaneGeometry(0.42, 0.56),
-    new THREE.MeshStandardMaterial({ color: 0xb8b2a0, roughness: 1 })
+    new THREE.MeshStandardMaterial({
+      color: 0xc4bda8,
+      emissive: 0x3a3830,
+      emissiveIntensity: 0.5,
+      roughness: 1,
+    })
   );
   page.position.set(x, y, -D / 2 + 0.1);
   page.rotation.z = 0.1;
   group.add(page);
+
+  if (interactables && floor !== undefined) {
+    interactables.push({
+      type: "read",
+      trigger: box(x, 1.0, -2.0, 1.3, 1.4, 2.4),
+      label: "read the page",
+      tag: `wren${floor}`,
+      mesh: page,
+    });
+  }
   return page;
 }
 

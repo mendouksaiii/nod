@@ -45,7 +45,7 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
 
   // ── Landing (0–11) ──
   writing(group, "DON'T RUN ON THE THIRD", 6, 5.0, 5.6, "#b06a58");
-  journalPage(group, 8.6);
+  journalPage(group, 8.6, 0.5, interactables, 3);
   rug(group, zones, 5.5, 8);
   const ll = new THREE.PointLight(0x8a5240, 75, 16, 1.6);
   ll.position.set(5, 6, 2);

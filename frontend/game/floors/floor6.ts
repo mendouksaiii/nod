@@ -49,7 +49,7 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
 
   // ── Landing (0–11): dry, and the last dry place ──
   writing(group, "it cannot see. do not splash.", 6, 4.4, 4.4, "#7b8f96");
-  journalPage(group, 8.6);
+  journalPage(group, 8.6, 0.5, interactables, 6);
   const ll = new THREE.PointLight(0x6f7f6a, 120, 18, 1.6);
   ll.position.set(5, 6, 2);
   group.add(ll);

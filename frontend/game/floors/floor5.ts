@@ -38,7 +38,7 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
 
   // ── Landing (0–11) ──
   writing(group, "it follows where you have been", 6, 4.5, 5.0, "#a08d5e");
-  journalPage(group, 8.4);
+  journalPage(group, 8.4, 0.5, interactables, 5);
   const ll = new THREE.PointLight(0x8a7038, 75, 16, 1.6);
   ll.position.set(5, 6, 2);
   group.add(ll);
