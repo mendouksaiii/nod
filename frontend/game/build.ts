@@ -308,9 +308,14 @@ export function shell(
   group.add(endR);
 }
 
-/** The locked stairwell down, with cold air leaking under it. */
+/**
+ * The locked stairwell down, with cold air leaking under it. Pushes its own
+ * interactable — the game only offers it once you are carrying that floor's
+ * key, so this is the thing every floor is actually about.
+ */
 export function stairwellDoor(
   group: THREE.Group,
+  interactables: Interactable[],
   x: number,
   glowColor = 0x9fb4d8
 ) {
@@ -340,6 +345,13 @@ export function stairwellDoor(
   const light = new THREE.PointLight(glowColor, 26, 12, 1.9);
   light.position.set(x - 1.2, 0.5, 0.5);
   group.add(light);
+
+  interactables.push({
+    type: "door",
+    trigger: box(x - 1.5, 1.4, 0, 2.2, 1.8, 2.4),
+    label: "unlock the door and go down",
+    tag: "stairs",
+  });
 
   return { panel, plate };
 }

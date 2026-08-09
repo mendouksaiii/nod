@@ -169,7 +169,7 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(vl);
 
   // ── Antechamber (74–92) ──
-  stairwellDoor(group, 91.8, 0xd8dce4);
+  stairwellDoor(group, interactables, 91.8, 0xd8dce4);
   crayonDrawing(group, 78.5, 2.1, (ctx) => {
     // just a door, and light under it
     ctx.strokeRect(78, 40, 100, 170);

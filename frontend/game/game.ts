@@ -35,6 +35,8 @@ export class NodGame {
   private dying = false;
   private transition: "none" | "descending" | "settled" | "escaped" = "none";
   private transT = 0;
+  /** One-shot: a descent must swap the floor exactly once, not every frame. */
+  private swapped = false;
   private hasKey = false;
   private decoy: { x: number; strength: number } | null = null;
   private decoyT = 0;
@@ -161,20 +163,40 @@ export class NodGame {
     setTimeout(() => (this.hud.card.style.opacity = "0"), 2600);
   }
 
+  /**
+   * Climb and hide triggers are deliberately large, so they will overlap the
+   * small things lying inside them. Discrete objects therefore outrank
+   * ambient ones — otherwise a key that lands near a climbable ledge can
+   * never be picked up. Ties break on whichever trigger he is nearest to.
+   */
+  private rank(it: Interactable): number {
+    if (it.type === "door") return 0;
+    if (it.isKey) return 1;
+    if (it.type === "hide") return 2;
+    if (it.type === "lever" || it.type === "cover") return 3;
+    if (it.type === "carry") return 4;
+    if (it.type === "battery") return 5;
+    return 6; // climb
+  }
+
   private findInteractable(): Interactable | null {
     const p = this.theo.position;
     const probe = new THREE.Vector3(p.x, p.y + 0.5, p.z);
-    const priority: Record<string, number> = {
-      door: 0, hide: 1, lever: 2, cover: 2, climb: 3, battery: 4, carry: 5,
-    };
+    const centre = new THREE.Vector3();
     let best: Interactable | null = null;
+    let bestScore = Infinity;
     for (const it of this.floor.interactables) {
       if (it.consumed) continue;
       if (it === this.theo.carried) continue;
       // The stairwell only offers itself once you are holding its key
       if (it.type === "door" && it.tag !== "settle" && it.tag !== "exit" && !this.hasKey) continue;
       if (!it.trigger.containsPoint(probe)) continue;
-      if (!best || priority[it.type] < priority[best.type]) best = it;
+      it.trigger.getCenter(centre);
+      const score = this.rank(it) * 1000 + probe.distanceTo(centre);
+      if (score < bestScore) {
+        bestScore = score;
+        best = it;
+      }
     }
     return best;
   }
@@ -349,6 +371,7 @@ export class NodGame {
     if (this.floorNumber <= BOTTOM_FLOOR) return;
     this.transition = "descending";
     this.transT = 0;
+    this.swapped = false;
     this.input.frozen = true;
   }
 
@@ -371,7 +394,8 @@ export class NodGame {
     if (this.transT > 0.3) this.hud.blackout.style.opacity = "1";
 
     if (this.transition === "descending") {
-      if (this.transT > 1.4 && this.floorNumber === this.floor.floor) {
+      if (this.transT > 1.4 && !this.swapped) {
+        this.swapped = true;
         this.loadFloor(this.floorNumber - 1);
       }
       if (this.transT > 2.6) {

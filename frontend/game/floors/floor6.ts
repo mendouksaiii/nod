@@ -225,7 +225,7 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(lal);
 
   // ── Antechamber (82–96) ──
-  stairwellDoor(group, 95.8, 0x9ec6b4);
+  stairwellDoor(group, interactables, 95.8, 0x9ec6b4);
   crayonDrawing(group, 86, 2.1, (ctx) => {
     // a wide low thing, all mouth
     ctx.beginPath(); ctx.ellipse(128, 120, 62, 46, 0, 0, Math.PI * 2); ctx.stroke();

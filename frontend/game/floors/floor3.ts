@@ -155,7 +155,7 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
   writing(group, "throw it far. it goes where the floor shakes.", 95, 5.2, 6.4, "#a8705c");
 
   // ── Antechamber (101–116) ──
-  stairwellDoor(group, 115.8, 0xc8b4b0);
+  stairwellDoor(group, interactables, 115.8, 0xc8b4b0);
   crayonDrawing(group, 105, 2.1, (ctx) => {
     // a child facing a child
     ctx.beginPath(); ctx.moveTo(128, 30); ctx.lineTo(128, 226); ctx.stroke();
