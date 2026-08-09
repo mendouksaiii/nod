@@ -3,10 +3,34 @@ import { Input } from "./input";
 import { Theo } from "./theo";
 import { NodCamera } from "./camera";
 import { Entity } from "./entity";
-import { FloorBuild, FloorContext, Interactable } from "./build";
+import { FloorBuild, FloorContext, Interactable, writing } from "./build";
 import { buildFloor, BOTTOM_FLOOR, FLOOR_TITLES, TOP_FLOOR } from "./floors";
 
-// Orchestrator: scene, loop, lighting, interaction, descent between floors.
+/**
+ * What the game needs from the house on Base. Kept as an interface so the
+ * game itself never imports viem — and so it still runs with no wallet at
+ * all, which is how the floors get built and tuned.
+ */
+export interface HouseBridge {
+  floorSeed(floor: number): Promise<bigint | null>;
+  enterHouse(): Promise<void>;
+  descend(from: number): Promise<void>;
+  fallToNod(phraseIndex: number, settled: boolean): Promise<void>;
+  reachTheDoor(): Promise<string>;
+  marksOn(floor: number): Promise<{ child: string; at: number; phrase: number | null }[]>;
+  phrases(): Promise<string[]>;
+}
+
+/** The warning a child is most likely to have left on each floor. */
+const FLOOR_PHRASE: Record<number, number> = {
+  7: 1, // it sees you move
+  6: 4, // she hears you cry
+  5: 5, // it follows where you have been
+  4: 6, // stand still
+  3: 2, // do not run
+  2: 3, // cover the mirrors
+  1: 7, // i could not do it
+};
 
 export class NodGame {
   private renderer: THREE.WebGLRenderer;
@@ -18,24 +42,22 @@ export class NodGame {
   private entity: Entity | null = null;
   private clock = new THREE.Clock();
   private raf = 0;
-  private hud!: {
-    battery: HTMLDivElement;
-    prompt: HTMLDivElement;
-    hint: HTMLDivElement;
-    vignette: HTMLDivElement;
-    blackout: HTMLDivElement;
-    card: HTMLDivElement;
-  };
+  private hud!: ReturnType<NodGame["buildHud"]>;
   private disposed = false;
 
   seed = 0;
   floorNumber = TOP_FLOOR;
+  private bridge: HouseBridge | null = null;
+  private phraseList: string[] = [];
+  private busyWithChain = false;
+
   private checkpointX = 2.8;
   private deathT = 0;
   private dying = false;
+  /** On-chain, being kept ends the run — you wake again as a new child. */
+  private runOver = false;
   private transition: "none" | "descending" | "settled" | "escaped" = "none";
   private transT = 0;
-  /** One-shot: a descent must swap the floor exactly once, not every frame. */
   private swapped = false;
   private hasKey = false;
   private decoy: { x: number; strength: number } | null = null;
@@ -50,11 +72,13 @@ export class NodGame {
       theo: this.theo, floor: this.floor, camera: this.cam,
       entity: this.entity, scene: this.scene, THREE,
       descend: () => this.beginDescent(),
-      goTo: (n: number) => this.loadFloor(n),
+      goTo: (n: number) => { void this.loadFloor(n); },
     };
   }
 
-  constructor(private container: HTMLElement, startFloor = TOP_FLOOR) {
+  constructor(private container: HTMLElement, bridge: HouseBridge | null = null) {
+    this.bridge = bridge;
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -68,14 +92,14 @@ export class NodGame {
     this.scene.fog = new THREE.Fog(0x07090d, 14, 46);
     this.scene.add(new THREE.HemisphereLight(0x39455e, 0x141821, 1.1));
 
-    // Locally random until the Inco run seed replaces it (Section 7).
+    // Offline fallback. With a wallet this is replaced per floor by the
+    // encrypted seed the house minted for this run.
     this.seed = Math.floor(Math.random() * 0xffffffff);
     this.theo = new Theo(this.scene);
     this.cam = new NodCamera(container.clientWidth / container.clientHeight);
     this.hud = this.buildHud(container);
 
-    this.floorNumber = startFloor;
-    this.loadFloor(startFloor);
+    void this.boot();
 
     this.input.attach(window);
     window.addEventListener("resize", this.onResize);
@@ -83,8 +107,19 @@ export class NodGame {
     this.loop();
   }
 
+  private async boot() {
+    if (this.bridge) {
+      try {
+        this.phraseList = await this.bridge.phrases();
+      } catch {
+        /* the walls will just be quiet */
+      }
+    }
+    await this.loadFloor(TOP_FLOOR);
+  }
+
   /** Tear down the current floor and raise the next one in its place. */
-  private loadFloor(n: number) {
+  private async loadFloor(n: number) {
     if (this.floor) {
       this.scene.remove(this.floor.group);
       this.floor.group.traverse((o) => {
@@ -94,15 +129,69 @@ export class NodGame {
     }
     this.entity?.dispose(this.scene);
     this.entity = null;
-
     this.floorNumber = n;
-    this.floor = buildFloor(this.scene, n, this.seed);
+
+    // The house decides how this floor is laid out — and only tells you
+    // about floors you have actually reached.
+    let seed = this.seed;
+    if (this.bridge) {
+      try {
+        const s = await this.bridge.floorSeed(n);
+        if (s !== null) seed = Number(s % 0xffffffffn);
+      } catch {
+        /* fall back to the local seed rather than stranding the player */
+      }
+    }
+
+    this.floor = buildFloor(this.scene, n, seed);
     if (this.floor.entity) this.entity = new Entity(this.scene, this.floor.entity);
 
     this.hasKey = false;
     this.checkpointX = this.floor.spawnX;
     this.theo.respawn(this.floor.spawnX);
     this.showCard(`floor ${n} — ${FLOOR_TITLES[n]}`);
+
+    if (this.bridge) void this.renderMarks(n);
+  }
+
+  /**
+   * The House Remembers. Every mark here was left by a real player the house
+   * kept on this floor — and the epitaph only decrypts because we are
+   * standing on it.
+   */
+  private async renderMarks(n: number) {
+    if (!this.bridge) return;
+    let marks: Awaited<ReturnType<HouseBridge["marksOn"]>>;
+    try {
+      marks = await this.bridge.marksOn(n);
+    } catch {
+      return;
+    }
+    if (this.floorNumber !== n || !marks.length) return;
+
+    const group = this.floor.group;
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3c, roughness: 1 });
+    let shown = 0;
+    marks.forEach((m, i) => {
+      // A pair of small shoes against the skirting, one pair per child
+      const x = this.floor.spawnX + 6 + i * 1.1;
+      for (const dz of [-0.16, 0.16]) {
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.13, 0.42), shoeMat);
+        shoe.position.set(x, 0.065, -3.9 + dz);
+        shoe.castShadow = true;
+        group.add(shoe);
+      }
+      // What they left, if the house will let us read it
+      if (m.phrase !== null && this.phraseList[m.phrase] && shown < 3) {
+        writing(group, this.phraseList[m.phrase], x + 2.5, 2.4 + shown * 1.5, 4.2, "#8b93a8");
+        shown++;
+      }
+    });
+    this.showCard(
+      marks.length === 1
+        ? "one child stopped here"
+        : `${marks.length} children stopped here`
+    );
   }
 
   private buildHud(container: HTMLElement) {
@@ -135,9 +224,16 @@ export class NodGame {
     const blackout = mk({ inset: "0", background: "#000", opacity: "0", transition: "opacity 0.35s" });
 
     const card = mk({
-      left: "50%", top: "44%", transform: "translate(-50%,-50%)",
+      left: "50%", top: "42%", transform: "translate(-50%,-50%)",
       fontSize: "20px", letterSpacing: "0.18em", opacity: "0",
       transition: "opacity 1.1s", textShadow: "0 2px 16px #000",
+      textAlign: "center", width: "80%",
+    });
+    const sub = mk({
+      left: "50%", top: "53%", transform: "translate(-50%,-50%)",
+      fontSize: "14px", fontStyle: "italic", opacity: "0",
+      transition: "opacity 1.1s", textShadow: "0 2px 16px #000",
+      textAlign: "center", width: "70%", lineHeight: "1.7",
     });
 
     const prompt = mk({
@@ -154,13 +250,20 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  throw      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
-    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout, card };
+    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout, card, sub };
   }
 
-  private showCard(text: string) {
+  private showCard(text: string, subtext = "", hold = 2600) {
     this.hud.card.textContent = text;
     this.hud.card.style.opacity = "0.85";
-    setTimeout(() => (this.hud.card.style.opacity = "0"), 2600);
+    this.hud.sub.textContent = subtext;
+    this.hud.sub.style.opacity = subtext ? "0.7" : "0";
+    if (hold > 0) {
+      setTimeout(() => {
+        this.hud.card.style.opacity = "0";
+        this.hud.sub.style.opacity = "0";
+      }, hold);
+    }
   }
 
   /**
@@ -176,7 +279,7 @@ export class NodGame {
     if (it.type === "lever" || it.type === "cover") return 3;
     if (it.type === "carry") return 4;
     if (it.type === "battery") return 5;
-    return 6; // climb
+    return 6;
   }
 
   private findInteractable(): Interactable | null {
@@ -188,7 +291,6 @@ export class NodGame {
     for (const it of this.floor.interactables) {
       if (it.consumed) continue;
       if (it === this.theo.carried) continue;
-      // The stairwell only offers itself once you are holding its key
       if (it.type === "door" && it.tag !== "settle" && it.tag !== "exit" && !this.hasKey) continue;
       if (!it.trigger.containsPoint(probe)) continue;
       it.trigger.getCenter(centre);
@@ -225,7 +327,6 @@ export class NodGame {
         break;
       case "lever":
       case "cover":
-        // Some levers eat the thing you are carrying (the brass pieces)
         if (it.tag === "cradle" || it.tag === "sheet") {
           const held = this.theo.carried;
           if (held?.mesh) held.mesh.parent?.remove(held.mesh);
@@ -246,7 +347,6 @@ export class NodGame {
     }
   }
 
-  /** Q throws whatever he is holding — the decoy verb the lower floors need. */
   private throwCarried() {
     const held = this.theo.carried;
     if (!held) return;
@@ -274,9 +374,17 @@ export class NodGame {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    if (!this.floor) {
+      this.renderer.render(this.scene, this.cam.camera);
+      return;
+    }
 
     const busy = this.dying || this.transition !== "none";
     if (busy) {
+      // Waking again after the house kept you
+      if (this.runOver && !this.busyWithChain && this.input.consume("KeyE")) {
+        void this.wakeAgain();
+      }
       this.input.endFrame();
     } else {
       if (this.input.consume("KeyE")) {
@@ -292,7 +400,6 @@ export class NodGame {
 
     this.theo.update(dt, this.input, this.floor.colliders, this.floor.bounds);
 
-    // Context the floors and senses read
     if (this.decoyT > 0) this.decoyT -= dt;
     else this.decoy = null;
     this.ctx.theoX = this.theo.position.x;
@@ -307,7 +414,6 @@ export class NodGame {
     this.entity?.update(dt, this.theo, this.floor.colliders, this.floor.bounds, this.floor, this.ctx);
     this.cam.update(dt, this.theo.position, this.theo.facing, this.floor.camClamp);
 
-    // Safe thresholds — the landing, and the stairwell antechamber
     if (!busy) {
       const e = this.floor.entity;
       if (e) {
@@ -342,17 +448,45 @@ export class NodGame {
     this.renderer.render(this.scene, this.cam.camera);
   };
 
+  // ── The house takes you ─────────────────────────────────────────────
+
   private beginDeath() {
     this.dying = true;
     this.deathT = 0;
     if (this.entity) this.entity.caught = false;
     this.input.frozen = true;
     this.hud.prompt.style.opacity = "0";
+
+    // Without a wallet this is just a retry. With one, the house keeps the
+    // child you were, and the next player will walk past your shoes.
+    if (this.bridge && !this.busyWithChain) {
+      this.runOver = true;
+      this.busyWithChain = true;
+      const phrase = FLOOR_PHRASE[this.floorNumber] ?? 0;
+      this.bridge
+        .fallToNod(phrase, false)
+        .catch(() => { /* keep the game playable if the write fails */ })
+        .finally(() => { this.busyWithChain = false; });
+    }
   }
 
   private updateDeath(dt: number) {
     this.deathT += dt;
     if (this.deathT > 0.5) this.hud.blackout.style.opacity = "1";
+
+    if (this.runOver) {
+      if (this.deathT > 1.2) {
+        this.showCard(
+          "the house kept you",
+          this.busyWithChain
+            ? "it is writing your name on the wall…"
+            : "another child will find your shoes here.\n\nE — wake again",
+          0
+        );
+      }
+      return;
+    }
+
     if (this.deathT > 1.5 && this.theo.position.x !== this.checkpointX) {
       this.theo.respawn(this.checkpointX);
       const e = this.floor.entity;
@@ -366,7 +500,29 @@ export class NodGame {
     }
   }
 
-  /** Down the stairs. Section 7 hangs the chain call on this fade. */
+  /** A new child wakes on the seventh floor. New seeds, new house. */
+  private async wakeAgain() {
+    if (!this.bridge) return;
+    this.busyWithChain = true;
+    this.showCard("waking", "the house learns your name…", 0);
+    try {
+      await this.bridge.enterHouse();
+      await this.loadFloor(TOP_FLOOR);
+      this.runOver = false;
+      this.dying = false;
+      this.transition = "none";
+      this.hud.blackout.style.opacity = "0";
+      this.hud.vignette.style.opacity = "0";
+      this.input.frozen = false;
+    } catch {
+      this.showCard("the house would not take you", "E — try again", 0);
+    } finally {
+      this.busyWithChain = false;
+    }
+  }
+
+  // ── Down, and out ───────────────────────────────────────────────────
+
   private beginDescent() {
     if (this.floorNumber <= BOTTOM_FLOOR) return;
     this.transition = "descending";
@@ -375,18 +531,31 @@ export class NodGame {
     this.input.frozen = true;
   }
 
-  /** He stops. He stays. The house keeps him. */
   private beginSettle() {
     this.transition = "settled";
     this.transT = 0;
     this.input.frozen = true;
+    if (this.bridge && !this.busyWithChain) {
+      this.busyWithChain = true;
+      this.bridge
+        .fallToNod(FLOOR_PHRASE[1] ?? 7, true)
+        .catch(() => {})
+        .finally(() => { this.busyWithChain = false; });
+    }
   }
 
-  /** The door opens. */
   private beginEscape() {
     this.transition = "escaped";
     this.transT = 0;
     this.input.frozen = true;
+    if (this.bridge && !this.busyWithChain) {
+      this.busyWithChain = true;
+      this.bridge
+        .reachTheDoor()
+        .then((text) => this.showCard("you woke up", text, 0))
+        .catch(() => this.showCard("you woke up", "", 0))
+        .finally(() => { this.busyWithChain = false; });
+    }
   }
 
   private updateTransition(dt: number) {
@@ -394,11 +563,12 @@ export class NodGame {
     if (this.transT > 0.3) this.hud.blackout.style.opacity = "1";
 
     if (this.transition === "descending") {
-      if (this.transT > 1.4 && !this.swapped) {
+      if (this.transT > 1.0 && !this.swapped) {
         this.swapped = true;
-        this.loadFloor(this.floorNumber - 1);
+        void this.doDescend();
       }
-      if (this.transT > 2.6) {
+      // Hold on black until the house has actually minted the floor below
+      if (this.transT > 2.2 && !this.busyWithChain) {
         this.hud.blackout.style.opacity = "0";
         this.transition = "none";
         this.input.frozen = false;
@@ -406,14 +576,27 @@ export class NodGame {
       return;
     }
 
-    // Both endings hold on black; Section 5 gives them their real screens.
-    if (this.transT > 1.2) {
-      this.hud.card.textContent =
-        this.transition === "settled"
-          ? "you stayed"
-          : "you woke up";
-      this.hud.card.style.opacity = "0.9";
+    if (this.transT > 1.2 && this.transition === "settled") {
+      this.showCard("you stayed", "the stairs are still there.\n\nE — wake again", 0);
+      this.runOver = true;
     }
+    if (this.transT > 1.2 && this.transition === "escaped" && !this.bridge) {
+      this.showCard("you woke up", "", 0);
+    }
+  }
+
+  private async doDescend() {
+    const from = this.floorNumber;
+    if (this.bridge) {
+      this.busyWithChain = true;
+      try {
+        await this.bridge.descend(from);
+      } catch {
+        /* let them through rather than trapping them on a fade */
+      }
+    }
+    await this.loadFloor(from - 1);
+    this.busyWithChain = false;
   }
 
   private onResize = () => {
