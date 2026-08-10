@@ -252,6 +252,17 @@ export class NodGame {
     });
     batteryWrap.appendChild(battery);
 
+    // A standing reminder that he is holding a torch and what state it is in.
+    // Without this a player who misses the opening hint has no way to know
+    // the torch can be switched at all.
+    const torchTag = mk({
+      left: "24px", bottom: "32px", fontSize: "10.5px",
+      letterSpacing: "0.18em", textTransform: "uppercase",
+      fontFamily: "ui-monospace, monospace", opacity: "0.35",
+      transition: "opacity 0.25s, color 0.25s",
+    });
+    torchTag.textContent = "f · torch off";
+
     // Per-floor colour grade. The palette warms and sickens as you descend,
     // then goes cold and monochrome at the bottom.
     const grade = mk({ inset: "0", mixBlendMode: "multiply", opacity: "0.3", transition: "background 2s" });
@@ -331,7 +342,7 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  throw      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
-    return { battery: battery as HTMLDivElement, prompt, hint, vignette, blackout, card, sub, grade, page };
+    return { battery: battery as HTMLDivElement, torchTag, prompt, hint, vignette, blackout, card, sub, grade, page };
   }
 
   private showCard(text: string, subtext = "", hold = 2600) {
@@ -580,6 +591,14 @@ export class NodGame {
     if (this.transition !== "none") this.updateTransition(dt);
 
     this.hud.battery.style.width = `${this.theo.battery}%`;
+    // Torch state, always on screen. Dead battery reads as dead, not broken.
+    const dead = this.theo.battery <= 0;
+    const lit = this.theo.flashOn && !dead;
+    this.hud.torchTag.textContent = dead
+      ? "f · torch dead"
+      : lit ? "f · torch on" : "f · torch off";
+    this.hud.torchTag.style.opacity = lit ? "0.85" : dead ? "0.5" : "0.35";
+    this.hud.torchTag.style.color = lit ? "#e8d3a8" : dead ? "#a56a60" : "#9aa2b5";
     this.hud.vignette.style.opacity = `${Math.min(1, (this.entity?.suspicion ?? 0) * 0.95)}`;
 
     if (busy) {

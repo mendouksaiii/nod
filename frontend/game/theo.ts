@@ -53,6 +53,7 @@ export class Theo {
 
   flashlight!: THREE.SpotLight;
   private flashTarget = new THREE.Object3D();
+  private lensWorld = new THREE.Vector3();
   flashOn = false;
   battery = 100;
 
@@ -595,7 +596,9 @@ export class Theo {
 
     // ── Flashlight ──
     if (this.flashOn && this.battery > 0) {
-      this.battery = Math.max(0, this.battery - dt * 1.7);
+      // ~95 seconds of light on a full cell. Short enough to ration, long
+      // enough that it reads as a dying battery rather than a broken torch.
+      this.battery = Math.max(0, this.battery - dt * 1.05);
       let intensity = 26;
       if (this.battery < 20) {
         // dying flicker
@@ -612,8 +615,15 @@ export class Theo {
       this.flashlight.intensity = THREE.MathUtils.damp(this.flashlight.intensity, 0, 14, dt);
     }
     const p = this.root.position;
-    this.flashlight.position.set(p.x + this.facing * 0.3, p.y + 0.62, p.z + 0.1);
-    this.flashTarget.position.set(p.x + this.facing * 7, p.y + 0.2, p.z);
+    // The beam leaves the torch he is actually holding, and goes where he is
+    // facing — so the prop, the light and his body all agree.
+    this.torchLens.getWorldPosition(this.lensWorld);
+    this.flashlight.position.copy(this.lensWorld);
+    this.flashTarget.position.set(
+      this.lensWorld.x + this.facing * 7,
+      this.lensWorld.y - 0.9,
+      this.lensWorld.z
+    );
 
     // Carried item rides the hands
     if (this.carried?.mesh) {
@@ -767,13 +777,12 @@ export class Theo {
     }
     if (this.turnT > 0) this.turnT = Math.max(0, this.turnT - dt * 1.8);
 
-    // Face travel direction, angled slightly toward camera so he reads in 2.5D
+    // Always face the way he is going, angled slightly toward camera so his
+    // face still reads in 2.5D. He must NOT swing round to face the camera
+    // when he stops — he keeps looking where he was headed, and so does the
+    // torch, because the beam follows the same facing.
     const targetYaw =
-      dir === 0 && speed < 0.3
-        ? 0
-        : this.facing > 0
-          ? Math.PI / 2 - 0.35
-          : -Math.PI / 2 + 0.35;
+      this.facing > 0 ? Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.35;
     this.root.rotation.y = THREE.MathUtils.damp(
       this.root.rotation.y,
       targetYaw,
