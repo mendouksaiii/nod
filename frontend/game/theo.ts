@@ -48,6 +48,8 @@ export class Theo {
   }
   private neck = new THREE.Group();
   private handAnchor = new THREE.Group();
+  private torchLens!: THREE.Mesh;
+  private glow!: THREE.PointLight;
 
   flashlight!: THREE.SpotLight;
   private flashTarget = new THREE.Object3D();
@@ -82,11 +84,16 @@ export class Theo {
   carried: Interactable | null = null;
 
   constructor(scene: THREE.Scene) {
-    const skin = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 1 });
+    // Warm enough to survive the house's cold ambient — under a blue-grey
+    // hemisphere a neutral beige reads as dead grey skin.
+    const skin = new THREE.MeshStandardMaterial({ color: 0xecd3b4, roughness: 1 });
     // The one warm thing in the whole house. A faded clay hoodie reads at any
     // distance and against every floor's palette — the house is cold, he isn't.
-    const pajama = new THREE.MeshStandardMaterial({ color: 0x7d4a40, roughness: 1 });
-    const hoodDark = new THREE.MeshStandardMaterial({ color: 0x63392f, roughness: 1 });
+    // Deep enough that his own warm light does not push it to orange
+    const pajama = new THREE.MeshStandardMaterial({ color: 0x8a3327, roughness: 1 });
+    const hoodDark = new THREE.MeshStandardMaterial({ color: 0x61221a, roughness: 1 });
+    // Dark shorts, so the red stops at his waist and his legs read as bare
+    const shorts = new THREE.MeshStandardMaterial({ color: 0x2e282b, roughness: 1 });
 
     // Torso tapers up — narrow shoulders, soft belly. Pivots at the hips.
     this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.165, 0.28, 4, 10), pajama);
@@ -122,19 +129,82 @@ export class Theo {
     // lean moves the whole upper body without detaching the feet.
     const hipRoot = this.hipRoot;
     hipRoot.position.y = 0.44;
-    hipRoot.add(this.torso, pocket, collar, hood, ...this.drawstrings);
+    // The hem of the hoodie, sitting over the top of the shorts
+    const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.172, 0.166, 0.09, 12), hoodDark);
+    hem.position.y = 0.015;
+    hem.castShadow = true;
+    hipRoot.add(this.torso, pocket, hem, collar, hood, ...this.drawstrings);
 
-    // Neck pivot so the head can lead turns and counter-bob
+    // ── Head ──
+    // He has a face. It is the thing you are trying to keep, so you have to
+    // be able to see it: big dark eyes, and hair swept off them rather than
+    // hanging over them. Local +Z is his forward, so features sit on +Z.
     this.neck.position.y = 0.4;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.195, 16, 14), skin);
-    head.scale.set(0.94, 1, 0.96);
-    head.position.y = 0.15;
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 0.17;
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.215, 18, 16), skin);
+    head.scale.set(0.95, 1.02, 0.97);
     head.castShadow = true;
-    const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshStandardMaterial({ color: 0x3b3540, roughness: 1 }));
-    fringe.scale.set(0.97, 0.6, 0.99);
-    fringe.position.set(-0.016, 0.235, 0);
-    fringe.castShadow = true;
-    this.neck.add(head, fringe);
+    headGroup.add(head);
+
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x2b2320, roughness: 1 });
+    // Cap of hair over the crown, pushed back off the forehead
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.222, 16, 12), hairMat);
+    cap.scale.set(0.99, 0.78, 1.0);
+    cap.position.set(0, 0.055, -0.022);
+    cap.castShadow = true;
+    headGroup.add(cap);
+    // A fringe swept across the brow — stops above the eyes
+    const sweep = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), hairMat);
+    sweep.scale.set(0.92, 0.4, 0.72);
+    sweep.position.set(0.03, 0.115, 0.085);
+    sweep.rotation.z = -0.22;
+    sweep.castShadow = true;
+    headGroup.add(sweep);
+    // Untidy tufts — nobody has brushed this child's hair in a while
+    for (const [tx, ty, tz, ts] of [
+      [-0.075, 0.155, -0.115, 0.8], [0.06, 0.165, -0.10, 0.65], [-0.015, 0.185, -0.03, 0.55],
+    ] as const) {
+      const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.05 * ts, 8, 6), hairMat);
+      tuft.scale.set(1.35, 0.8, 1.05);
+      tuft.position.set(tx, ty, tz);
+      tuft.rotation.z = tx * 2;
+      tuft.castShadow = true;
+      headGroup.add(tuft);
+    }
+
+    // Eyes, set on his forward face and large the way a small child's are
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x241d1b, roughness: 0.55 });
+    for (const ex of [0.072, -0.072]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), eyeMat);
+      eye.scale.set(1, 1.15, 0.6);
+      eye.position.set(ex, 0.0, 0.187);
+      headGroup.add(eye);
+      // A single catchlight so the eyes are not two dead holes in the dark
+      const glint = new THREE.Mesh(
+        new THREE.SphereGeometry(0.009, 6, 5),
+        new THREE.MeshBasicMaterial({ color: 0xf2ece0 })
+      );
+      glint.position.set(ex + 0.011, 0.011, 0.207);
+      headGroup.add(glint);
+    }
+    // The suggestion of a nose, no mouth — he does not talk
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), skin);
+    nose.scale.set(0.9, 0.75, 0.8);
+    nose.position.set(0, -0.052, 0.203);
+    headGroup.add(nose);
+
+    // Ears
+    for (const ex of [0.196, -0.196]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), skin);
+      ear.scale.set(0.42, 1, 0.75);
+      ear.position.set(ex, -0.012, -0.012);
+      ear.castShadow = true;
+      headGroup.add(ear);
+    }
+
+    this.neck.add(headGroup);
     hipRoot.add(this.neck);
 
     // ── Legs: hip → knee → shin, each hinging at its top ──
@@ -146,7 +216,7 @@ export class Theo {
       [this.hipR, this.kneeR, -0.075],
     ] as const) {
       hip.position.set(0, 0.44, z);
-      const thigh = new THREE.Mesh(thighGeo, pajama);
+      const thigh = new THREE.Mesh(thighGeo, shorts);
       thigh.position.y = -0.11;
       thigh.castShadow = true;
       hip.add(thigh);
@@ -233,10 +303,23 @@ export class Theo {
       new THREE.CylinderGeometry(0.06, 0.075, 0.38, 10),
       new THREE.MeshStandardMaterial({ color: 0x3c414f, roughness: 0.9 })
     );
-    // Held along the forearm: hangs down at rest, points ahead when raised
-    torch.rotation.z = 0.3;
-    torch.position.set(0.03, -0.13, 0);
+    // Gripped so the barrel points along his forward axis — at rest it hangs
+    // at his side, and when he raises it the beam goes where he is looking.
+    // Along the forearm's own axis: hanging at his side it points at the
+    // floor, and raising the arm swings the beam forward. (Aligning it to
+    // the limb's +Z instead makes it rotate up across his chest.)
+    torch.position.set(0, -0.17, 0.01);
     torch.castShadow = true;
+    // A lit lens on the front so the torch reads as a torch, not a pipe.
+    // A sphere, not a disc — a disc goes edge-on and reads as a white bar
+    // across his chest from the side camera.
+    const lens = new THREE.Mesh(
+      new THREE.SphereGeometry(0.036, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffe9b8 })
+    );
+    lens.position.set(0, -0.37, 0.01);
+    this.handAnchor.add(lens);
+    this.torchLens = lens;
     this.handAnchor.position.y = -0.15;
     this.handAnchor.add(torch);
     this.elbowR.add(this.handAnchor);
@@ -244,6 +327,13 @@ export class Theo {
     this.root.add(this.body);
     this.root.position.set(-2, 0, 0);
     scene.add(this.root);
+
+    // A soft warm light travelling with him. The house is lit cold from
+    // above, so without this he renders as a grey child in a grey room — he
+    // has to stay the one warm thing in frame even when he is in shadow.
+    this.glow = new THREE.PointLight(0xffc9a4, 2.2, 2.4, 1.6);
+    this.glow.position.set(0, 0.75, 0.45);
+    this.root.add(this.glow);
 
     this.flashlight = new THREE.SpotLight(0xffe9c2, 0, 15, 0.42, 0.55, 1.1);
     this.flashlight.castShadow = true;
@@ -596,8 +686,10 @@ export class Theo {
       shR = -0.9 - sw * 0.05;
       elR = 1.0;
     } else if (holdingUp) {
-      shR = -1.02 - sw * 0.04;
-      elR = 0.5;
+      // Arm nearly straight out in front, the way a child holds a torch it
+      // does not quite trust — the pose the concept art is built around.
+      shR = -1.34 - sw * 0.04;
+      elR = 0.22;
     } else if (sneaking) {
       shR = 0.12 - sw * armSwing * 0.5;
       elR = 0.75;
@@ -617,6 +709,13 @@ export class Theo {
     this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, 0.1 - clutch * 0.03, 7, dt);
     this.bear.rotation.z = THREE.MathUtils.damp(
       this.bear.rotation.z, -0.55 - clutch * 0.25 + Math.sin(p) * stride * 0.06, 8, dt
+    );
+
+    // The lens is only lit when the torch is, and the torch throws a little
+    // back onto him when it is
+    this.torchLens.visible = holdingUp;
+    this.glow.intensity = THREE.MathUtils.damp(
+      this.glow.intensity, holdingUp ? 4.2 : 2.2, 6, dt
     );
 
     // Drawstrings swing with the stride

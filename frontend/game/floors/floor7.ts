@@ -103,7 +103,9 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   );
   shade.position.set(6.0, 0.92, -3.0);
   group.add(lampBase, shade);
-  const lamp = new THREE.PointLight(0xd8a355, 120, 15, 1.6);
+  // Tight and warm: it should pool on the bedside and let the rest of the
+  // room stay dark, not flood the whole floor amber.
+  const lamp = new THREE.PointLight(0xd8a355, 46, 8.5, 1.9);
   lamp.position.set(6.0, 0.95, -2.6);
   lamp.castShadow = true;
   group.add(lamp);
@@ -536,7 +538,7 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
     label: "take the old key", mesh: key, isKey: true,
   });
 
-  fills(group, [[6, 50], [22, 60], [46, 65], [67, 34], [83, 60]], 0x2e3648);
+  fills(group, [[6, 22], [22, 40], [46, 48], [67, 26], [83, 40]], 0x2e3648);
   scene.add(group);
 
   return {
