@@ -211,6 +211,21 @@ export const FOUND_TEXT: Record<string, string> = {
     "nobody wrote a name beside it.",
   ].join("\n"),
 
+  // Floor 7 — the dolls' house
+  "note:dollhouse": [
+    "somebody built a model of a house and left it in the playroom.",
+    "",
+    "it has seven floors. the top one has a small bed in it",
+    "and a smaller chair, and a window painted grey.",
+    "",
+    "the floors below are furnished too. there is a bath on the sixth.",
+    "there are shelves on the fifth. the third has a long empty corridor",
+    "and something has been pushed up underneath its floorboards.",
+    "",
+    "one room on the top floor has a light on.",
+    "it is the room you woke up in.",
+  ].join("\n"),
+
   // Floor 6 — Tom
   "note:shoes": [
     "a pair of shoes set side by side at the water's edge,",
@@ -457,6 +472,106 @@ export function stairwellDoor(
   });
 
   return { panel, plate };
+}
+
+// ── Props ──
+// Non-colliding set dressing. A room reads as lived-in when it holds the
+// leftovers of somebody living in it: the cup nobody finished, the coat still
+// on its hook, the thing knocked over on the way out.
+
+/** Cloth hanging from something — a sheet, a towel, a coat, a curtain. */
+export function cloth(
+  group: THREE.Group, x: number, y: number, w: number, h: number,
+  color: number, z = -D / 2 + 0.5, tilt = 0
+) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshStandardMaterial({ color, roughness: 1, side: THREE.DoubleSide })
+  );
+  m.position.set(x, y, z);
+  m.rotation.z = tilt;
+  m.castShadow = true;
+  group.add(m);
+  return m;
+}
+
+/** A framed picture on the back wall. Faces are always too dark to make out. */
+export function picture(
+  group: THREE.Group, x: number, y: number, w = 0.9, h = 1.2, frameColor = 0x332c26
+) {
+  solid(group, null, w + 0.12, h + 0.12, 0.08, x, y, -D / 2 + 0.1, frameColor);
+  const canvas = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshStandardMaterial({ color: 0x2b2b31, roughness: 1 })
+  );
+  canvas.position.set(x, y, -D / 2 + 0.15);
+  group.add(canvas);
+  return canvas;
+}
+
+/** A row of small bottles, jars or tins on a surface. */
+export function bottles(
+  group: THREE.Group, x: number, y: number, z: number, n: number,
+  palette: number[] = [0x4b5230, 0x5a3a26, 0x3f4442], scale = 1
+) {
+  for (let i = 0; i < n; i++) {
+    const h = (0.16 + (i % 3) * 0.06) * scale;
+    const b = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05 * scale, 0.055 * scale, h, 8),
+      new THREE.MeshStandardMaterial({
+        color: palette[i % palette.length], roughness: 0.6,
+        transparent: true, opacity: 0.9,
+      })
+    );
+    b.position.set(x + i * 0.15 * scale, y + h / 2, z);
+    b.castShadow = true;
+    group.add(b);
+  }
+}
+
+/** Small debris scattered on the floor — the house does not tidy itself. */
+export function debris(
+  group: THREE.Group, x: number, span: number, n: number, color: number, z = -0.9, scale = 1
+) {
+  for (let i = 0; i < n; i++) {
+    const s = (0.06 + ((i * 37) % 9) * 0.015) * scale;
+    const d = new THREE.Mesh(
+      new THREE.BoxGeometry(s, s * 0.6, s),
+      new THREE.MeshStandardMaterial({ color, roughness: 1 })
+    );
+    d.position.set(
+      x + ((i * 53) % 100) / 100 * span - span / 2,
+      s * 0.3,
+      z + (((i * 31) % 100) / 100 - 0.5) * 1.6
+    );
+    d.rotation.y = i * 0.7;
+    d.castShadow = true;
+    group.add(d);
+  }
+}
+
+/** Cobweb in a corner — thin crossed threads, barely there. */
+export function cobweb(group: THREE.Group, x: number, y: number, size = 0.8) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x8f97a4, transparent: true, opacity: 0.16, side: THREE.DoubleSide,
+  });
+  const web = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+  web.position.set(x, y, -D / 2 + 0.2);
+  web.rotation.z = Math.PI / 4;
+  group.add(web);
+  return web;
+}
+
+/** A pile of books, tipped over the way children leave them. */
+export function bookPile(group: THREE.Group, x: number, y: number, z: number, n = 4) {
+  const colors = [0x3d3524, 0x2f3a2c, 0x453a2a, 0x3a2f36];
+  for (let i = 0; i < n; i++) {
+    const b = solid(
+      group, null, 0.34 - i * 0.02, 0.07, 0.26, x + i * 0.015, y + 0.04 + i * 0.075, z,
+      colors[i % colors.length]
+    );
+    b.rotation.y = i * 0.18 - 0.2;
+  }
 }
 
 /** Soft front fills so silhouettes never drown in pure black. */

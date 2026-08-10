@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, H, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing,
+  bookPile, bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider,
+  fills, FloorBuild, H, journalPage, makeKey, picture, shell, solid,
+  stairwellDoor, writing,
 } from "../build";
 
 // FLOOR 7 — THE NURSERY. Where he wakes. The teaching floor: it hunts by
@@ -202,6 +203,52 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
     solid(group, null, 0.34, 0.14, 0.5, 31.2 + i * 0.55, 0.07, -3.9, 0x2a2f3c);
   writing(group, "— wren    — tom    — ivy", 32.2, 1.6, 2.6, "#69718a");
   writing(group, "stay still. it sees you move.", 21.5, 5.1, 4.6, "#8b93a8");
+
+  // A mobile still turning over the cot, long after anyone stopped winding it
+  const mobileHub = new THREE.Group();
+  const bar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 2.6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x39323c, roughness: 1 })
+  );
+  bar.rotation.z = Math.PI / 2;
+  mobileHub.add(bar);
+  for (let i = 0; i < 4; i++) {
+    const cord = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4),
+      new THREE.MeshStandardMaterial({ color: 0x4a4450, roughness: 1 })
+    );
+    cord.position.set(-1.1 + i * 0.74, -0.28, 0);
+    const charm = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.12),
+      new THREE.MeshStandardMaterial({ color: [0x5b5470, 0x6b6250, 0x4e5a63, 0x6a5560][i], roughness: 1 })
+    );
+    charm.position.set(-1.1 + i * 0.74, -0.58, 0);
+    charm.castShadow = true;
+    mobileHub.add(cord, charm);
+  }
+  mobileHub.position.set(cotX, 7.6, -1.5);
+  group.add(mobileHub);
+  (group.userData as { mobile?: THREE.Group }).mobile = mobileHub;
+
+  // A nightlight nearly out of life, and the toys nobody put away
+  const nightlight = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 10, 8),
+    new THREE.MeshStandardMaterial({
+      color: 0xd8b98a, emissive: 0xc09048, emissiveIntensity: 1.1, roughness: 1,
+    })
+  );
+  nightlight.position.set(28.4, 0.35, -3.6);
+  group.add(nightlight);
+  const nl = new THREE.PointLight(0xd0964c, 26, 7, 1.8);
+  nl.position.set(28.4, 0.5, -3.2);
+  group.add(nl);
+  debris(group, 26, 7, 9, 0x3c3644, -1.4);
+  cobweb(group, 33.4, 8.4, 1.5);
+  picture(group, 17.5, 5.4, 1.0, 1.3);
+
+  // A stool knocked onto its side, exactly where a running child would leave it
+  const stool = solid(group, null, 0.5, 0.9, 0.5, 33, 0.26, -0.9, FURNITURE);
+  stool.rotation.z = Math.PI / 2;
   const cotLight = new THREE.PointLight(0x46587c, 130, 26, 1.5);
   cotLight.position.set(20, 9, 2);
   group.add(cotLight);
@@ -284,6 +331,59 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   if ((seed >> 3) % 2 === 0)
     writing(group, "it walks when the house sleeps", 52.5, 4.4, 4.0, "#6d7590");
 
+  // ── The dolls' house ──
+  // Somebody built a model of this house. It has seven floors. The rooms are
+  // the rooms you are standing in.
+  {
+    const dh = new THREE.Group();
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x3a3038, roughness: 1 });
+    const roomMat = new THREE.MeshStandardMaterial({ color: 0x241f28, roughness: 1 });
+    for (let i = 0; i < 7; i++) {
+      const y = 0.18 + i * 0.3;
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.04, 0.7), shellMat);
+      slab.position.set(0, y, 0);
+      dh.add(slab);
+      for (let r = 0; r < 3; r++) {
+        const cell = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.24, 0.55), roomMat);
+        cell.position.set(-0.5 + r * 0.5, y + 0.15, -0.02);
+        dh.add(cell);
+      }
+    }
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1.05, 0.42, 4), shellMat);
+    roof.rotation.y = Math.PI / 4;
+    roof.position.y = 2.34;
+    dh.add(roof);
+    // One tiny warm window, on the floor you are standing on
+    const litRoom = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.34, 0.18),
+      new THREE.MeshBasicMaterial({ color: 0xd8a355, transparent: true, opacity: 0.85 })
+    );
+    litRoom.position.set(-0.5, 2.03, 0.36);
+    dh.add(litRoom);
+    dh.traverse((m) => { m.castShadow = true; m.receiveShadow = true; });
+    dh.position.set(53.4, 0, -3.0);
+    group.add(dh);
+    const dhl = new THREE.PointLight(0xc08a48, 14, 4.5, 2);
+    dhl.position.set(52.9, 2.1, -2.5);
+    group.add(dhl);
+  }
+  interactables.push({
+    type: "read", trigger: box(53.4, 1.2, -1.4, 1.5, 1.4, 1.8),
+    label: "look into the dolls' house", tag: "note:dollhouse",
+  });
+
+  // Chalk on the floorboards — a hopscotch grid that stops after seven
+  for (let i = 0; i < 7; i++) {
+    const sq = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.8, 0.8),
+      new THREE.MeshBasicMaterial({ color: 0x8f96a6, transparent: true, opacity: 0.13 })
+    );
+    sq.rotation.x = -Math.PI / 2;
+    sq.position.set(40 + i * 0.95, 0.015, 1.4);
+    group.add(sq);
+  }
+  debris(group, 47, 9, 8, 0x453d52, 0.4);
+
   // ── The wardrobe room ──
   solid(group, colliders, 3.4, 8.5, 2.4, 60.9, 4.25, -2.2, FURNITURE);
   const doorA = solid(group, null, 1.5, 7.8, 0.12, 59.7, 3.9, -0.7, DARK);
@@ -349,6 +449,19 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   if ((seed >> 5) % 2 === 0)
     writing(group, "some of these are not wardrobes", 63.5, 6.2, 4.2, "#69718a");
 
+  // Coats far too big for anyone who lives here, still on their hooks
+  solid(group, null, 6.0, 0.14, 0.18, 71.5, 6.9, -D / 2 + 0.2, DARK);
+  for (let i = 0; i < 4; i++) {
+    cloth(group, 69.2 + i * 1.5, 5.4, 1.05, 2.9,
+      [0x3b3746, 0x453c3a, 0x35404a, 0x3f3a33][i], -D / 2 + 0.55, (i % 2 ? 1 : -1) * 0.05);
+  }
+  // A suitcase, packed and never taken anywhere
+  solid(group, null, 1.15, 0.75, 0.5, 73.4, 0.37, -1.0, 0x453830);
+  solid(group, null, 1.2, 0.09, 0.55, 73.4, 0.66, -1.0, 0x2f2620);
+  bottles(group, 66.9, 2.9, -1.8, 3, [0x4a5460, 0x574a3e], 0.9);
+  cobweb(group, 58.9, 8.6, 1.7);
+  debris(group, 63, 6, 6, 0x3a3440, -0.6);
+
   const wl = new THREE.PointLight(0x53604f, 85, 24, 1.5);
   wl.position.set(66, 4.5, 2.6);
   group.add(wl);
@@ -369,6 +482,18 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
     ctx.moveTo(146, 140); ctx.lineTo(188, 228); ctx.stroke();
   }, "it lives in the water");
   writing(group, "down is out", 84.5, 4.9, 2.8);
+  // Where the children waited before they went down. Their coats are still here.
+  solid(group, null, 4.4, 0.12, 0.16, 79.5, 4.4, -D / 2 + 0.2, DARK);
+  for (let i = 0; i < 3; i++)
+    cloth(group, 78.0 + i * 1.5, 3.4, 0.8, 1.9, [0x4a4038, 0x3a3d48, 0x453a44][i], -D / 2 + 0.5, 0.04);
+  // An umbrella stand by a door that has never once been rained on
+  solid(group, null, 0.42, 0.72, 0.42, 86.6, 0.36, -3.4, 0x35302c);
+  for (const [ux, uz, tilt] of [[86.5, -3.4, 0.1], [86.7, -3.3, -0.14]] as const) {
+    const um = solid(group, null, 0.07, 1.2, 0.07, ux, 0.95, uz, 0x2f3a3c);
+    um.rotation.z = tilt;
+  }
+  bookPile(group, 81.5, 0, -3.4, 3);
+  cobweb(group, 88.2, 7.2, 1.4);
   journalPage(group, 84.2, 0.5, interactables, 7);
   const al = new THREE.PointLight(0x3e4a66, 100, 22, 1.5);
   al.position.set(82, 7, 2);
@@ -403,6 +528,10 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
       sense: "sight", shape: "nursery",
       waypoints: [17, 30, 45, 56, 70], dwellSeconds: 2.4, startIndex: 2,
       safeBelow: 13.5, safeAbove: 75,
+    },
+    update(dt) {
+      // Nobody has wound it in a long time and it has not stopped
+      mobileHub.rotation.y += dt * 0.12;
     },
   };
 }

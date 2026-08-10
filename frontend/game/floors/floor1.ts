@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import {
-  box, D, divider, fills, FloorBuild, journalPage,
+  box, cloth, cobweb, D, divider, fills, FloorBuild, journalPage,
   shell, solid, writing, Zone,
 } from "../build";
 
@@ -77,6 +77,21 @@ export function buildFloor1(scene: THREE.Scene, seed: number): FloorBuild {
   for (const [cx, cw] of [[31, 5], [49, 4], [66, 6], [81, 4]]) {
     solid(group, colliders, cw, 1.0, 2.6, cx, 0.5, -3.2, 0x1b1f25);
   }
+  // A hall runner going the whole way to the door, and dust sheets over
+  // shapes that might be furniture. Kept sparse on purpose — the emptiness
+  // of this room is the last thing the house has left to do to you.
+  const runner = new THREE.Mesh(
+    new THREE.PlaneGeometry(82, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x1e2229, roughness: 1 })
+  );
+  runner.rotation.x = -Math.PI / 2;
+  runner.position.set(54, 0.012, -0.8);
+  group.add(runner);
+  for (const [cx, cw] of [[31, 5], [66, 6]] as const)
+    cloth(group, cx, 0.85, cw + 0.6, 1.7, 0x2a2e35, -3.2, 0.02);
+  cobweb(group, 13.4, 8.4, 1.8);
+  cobweb(group, 94.6, 8.0, 1.6);
+
   writing(group, "do not stop", 47, 6.2, 3.4, "#7d838f");
   writing(group, "whatever it offers you", 63, 5.6, 4.6, "#70767f");
 

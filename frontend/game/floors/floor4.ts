@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing, Zone,
+  bookPile, bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider,
+  fills, FloorBuild, journalPage, makeKey, picture, shell, solid,
+  stairwellDoor, writing, Zone,
 } from "../build";
 
 // FLOOR 4 — THE STUDY. Wet greens, and a thing with no face that pings the
@@ -70,6 +71,30 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
     type: "hide", trigger: box(20, 1, -0.6, 7, 1, 1.2), label: "press into the books",
     hidePoint: new THREE.Vector3(20, 0, -1.9), hidePose: "stand",
   });
+  // A library ladder on its rail, books pulled out and abandoned mid-search,
+  // and a globe of a world that does not have this house on it.
+  const ladder = new THREE.Group();
+  for (const sx of [-0.28, 0.28])
+    ladder.add(solid(ladder, null, 0.07, 5.4, 0.07, sx, 2.7, 0, 0x4a3f2c));
+  for (let i = 0; i < 8; i++)
+    ladder.add(solid(ladder, null, 0.62, 0.06, 0.06, 0, 0.5 + i * 0.62, 0, 0x4a3f2c));
+  ladder.position.set(24.6, 0, -1.5);
+  ladder.rotation.z = -0.07;
+  ladder.traverse((m) => { m.castShadow = true; });
+  group.add(ladder);
+  bookPile(group, 17.4, 0, -0.9, 5);
+  bookPile(group, 22.1, 0, -1.1, 3);
+  const globe = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34, 14, 12),
+    new THREE.MeshStandardMaterial({ color: 0x4d5a48, roughness: 1 })
+  );
+  globe.position.set(26.6, 0.9, -2.2);
+  globe.rotation.z = 0.4;
+  globe.castShadow = true;
+  solid(group, null, 0.3, 0.55, 0.3, 26.6, 0.28, -2.2, 0x3f3728);
+  group.add(globe);
+  cobweb(group, 12.4, 8.6, 1.7);
+
   const s1 = new THREE.PointLight(0x4f6a4a, 90, 22, 1.6);
   s1.position.set(20, 8, 3);
   group.add(s1);
@@ -107,6 +132,33 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
     hidePoint: new THREE.Vector3(39, 0, -2.5), hidePose: "crawl",
   });
   writing(group, "the padded room is the only quiet one", 36, 8.6, 6.4, "#8aa88a");
+  // Somebody sat here a long time: a side table, a cup gone cold, a blanket
+  // over the arm of the chair, and a reading lamp still burning.
+  solid(group, null, 0.68, 0.6, 0.62, 41.6, 0.3, -2.2, 0x3f3a2c);
+  const cup = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.08, 0.13, 10),
+    new THREE.MeshStandardMaterial({ color: 0x7d7a6a, roughness: 0.9 })
+  );
+  cup.position.set(41.6, 0.67, -2.2);
+  cup.castShadow = true;
+  group.add(cup);
+  const readLamp = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.22, 0.22, 12, 1, true),
+    new THREE.MeshStandardMaterial({
+      color: 0xc0b481, emissive: 0x8f8348, emissiveIntensity: 0.85,
+      roughness: 1, side: THREE.DoubleSide,
+    })
+  );
+  readLamp.position.set(41.7, 1.5, -2.4);
+  solid(group, null, 0.05, 0.8, 0.05, 41.7, 1.0, -2.4, 0x3f3728);
+  group.add(readLamp);
+  const rlp = new THREE.PointLight(0xc9a860, 42, 8, 1.7);
+  rlp.position.set(41.7, 1.45, -1.9);
+  group.add(rlp);
+  cloth(group, 37.6, 1.3, 1.0, 1.3, 0x4a5240, -1.5, 0.1);
+  bookPile(group, 34.6, 0, -0.8, 4);
+  picture(group, 31.0, 5.4, 0.9, 1.15);
+
   const rl = new THREE.PointLight(0x5c7a52, 95, 22, 1.5);
   rl.position.set(36, 7, 3);
   group.add(rl);
@@ -178,6 +230,33 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
       hidePoint: new THREE.Vector3(81, 0, -2.2), hidePose: "stand" }
   );
   soft(group, zones, 81, 3.5, 3.4, 6.8, 0x36402e);
+  // Records out of their sleeves, a stack of discs, and a stopped clock
+  for (let i = 0; i < 4; i++) {
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.012, 18),
+      new THREE.MeshStandardMaterial({ color: 0x1c1a18, roughness: 0.5 })
+    );
+    disc.position.set(79.4 + i * 0.1, 3.24 + i * 0.014, -2.2);
+    disc.rotation.z = 0.02 * i;
+    group.add(disc);
+  }
+  for (let i = 0; i < 3; i++) {
+    const sleeve = solid(group, null, 0.62, 0.62, 0.03, 74.6 + i * 0.12, 0.32, -0.9, 0x3a3529);
+    sleeve.rotation.z = 0.06 * i - 0.06;
+  }
+  const clock = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.42, 0.1, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0x6f6a54, emissive: 0x2e2b20, emissiveIntensity: 0.5, roughness: 0.8,
+    })
+  );
+  clock.rotation.x = Math.PI / 2;
+  clock.position.set(83.5, 5.2, -D / 2 + 0.22);
+  group.add(clock);
+  bottles(group, 76.0, 3.24, -1.5, 3, [0x4a5240, 0x574a3e], 1.0);
+  cobweb(group, 85.6, 8.0, 1.5);
+  debris(group, 78, 8, 7, 0x2f2d22, -0.7);
+
   const rl2 = new THREE.PointLight(0x50663f, 85, 20, 1.6);
   rl2.position.set(78, 6.5, 2.6);
   group.add(rl2);

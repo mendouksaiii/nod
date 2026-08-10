@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing, Zone,
+  bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
+  FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
+  writing, Zone,
 } from "../build";
 
 // FLOOR 5 — THE PANTRY. Jaundiced yellows, everything sticky. The feeder
@@ -65,6 +66,17 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
     type: "hide", trigger: box(24, 0.6, -0.8, 1.7, 0.6, 1.2),
     label: "hide under the slab", hidePoint: new THREE.Vector3(24, 0, -2.4), hidePose: "crawl",
   });
+  // A butcher's block with a cleaver still in it, salt tubs, frost on the wall
+  solid(group, colliders, 1.6, 1.0, 1.2, 21, 0.5, -3.4, 0x453a2c);
+  const cleaver = solid(group, null, 0.5, 0.3, 0.05, 21.1, 1.15, -3.4, 0x8a8574);
+  cleaver.rotation.z = -0.5;
+  solid(group, null, 0.12, 0.45, 0.12, 21.28, 1.35, -3.4, 0x3f342a);
+  for (const tx of [16.4, 17.5])
+    solid(group, null, 0.75, 0.6, 0.7, tx, 0.3, -3.6, 0x4a4438);
+  cloth(group, 26.2, 3.4, 1.1, 2.4, 0x5d6068, -3.0, 0.05);
+  cobweb(group, 12.5, 8.2, 1.6);
+  debris(group, 22, 8, 7, 0x2f2820, -1.2);
+
   const cl = new THREE.PointLight(0x50607a, 85, 20, 1.6);
   cl.position.set(19, 7, 2.4);
   group.add(cl);
@@ -132,6 +144,37 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
       if (!spice) spice = maskCloud(b.group, b.zones, 55.5, 0xbb9a4a, "spice");
     },
   });
+
+  // The kitchen is mid-meal and has been for a long time: pans on the range,
+  // a ladle, knives on a rail, and four small bowls laid out and untouched.
+  for (let i = 0; i < 4; i++) {
+    const bowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.15, 0.13, 12, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0x6e6a5c, roughness: 1, side: THREE.DoubleSide,
+      })
+    );
+    bowl.position.set(50.6 + i * 1.6, 1.68, -2.0);
+    bowl.castShadow = true;
+    group.add(bowl);
+  }
+  solid(group, null, 2.6, 1.5, 1.4, 58.5, 0.75, -3.2, 0x35302a);
+  for (const [px, pr] of [[57.8, 0.36], [59.2, 0.28]] as const) {
+    const pan = new THREE.Mesh(
+      new THREE.CylinderGeometry(pr, pr * 0.85, 0.22, 12),
+      new THREE.MeshStandardMaterial({ color: 0x4a453c, roughness: 0.7, metalness: 0.3 })
+    );
+    pan.position.set(px, 1.62, -3.2);
+    pan.castShadow = true;
+    group.add(pan);
+  }
+  solid(group, null, 3.6, 0.05, 0.05, 52.5, 3.5, -3.4, 0x5a5348);
+  for (let i = 0; i < 5; i++) {
+    const kn = solid(group, null, 0.07, 0.62 - i * 0.06, 0.02, 51.2 + i * 0.62, 3.15, -3.4, 0x8a8574);
+    kn.rotation.z = 0.02 * i;
+  }
+  bottles(group, 49.6, 1.62, -1.2, 4, [0x6b5a2e, 0x4b5230, 0x5a3a26], 1.1);
+  picture(group, 61.0, 4.6, 0.85, 1.05);
 
   const kl = new THREE.PointLight(0x9a7a34, 95, 22, 1.5);
   kl.position.set(54, 7, 2.6);
@@ -205,6 +248,31 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
     type: "carry", trigger: box(81, 0.6, 0.5, 0.9, 0.7, 0.9),
     label: "pick up the meat", mesh: bait, tag: "throwable",
   });
+
+  // Scales, sacks, and a tally of what the house has eaten
+  const scaleArm = solid(group, null, 0.9, 0.05, 0.05, 88.4, 1.62, -2.8, 0x6b6250);
+  scaleArm.rotation.z = -0.12;
+  solid(group, null, 0.12, 0.5, 0.12, 88.4, 1.35, -2.8, 0x4a4438);
+  for (const px of [88.0, 88.85]) {
+    const pan = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.16, 0.07, 10),
+      new THREE.MeshStandardMaterial({ color: 0x726a56, roughness: 0.7, metalness: 0.3 })
+    );
+    pan.position.set(px, px < 88.4 ? 1.5 : 1.62, -2.8);
+    group.add(pan);
+  }
+  for (let i = 0; i < 3; i++) {
+    const sk = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.4, 0.5, 5, 10),
+      new THREE.MeshStandardMaterial({ color: 0x6f5f3c, roughness: 1 })
+    );
+    sk.position.set(77.5 + i * 0.95, 0.5, -0.9);
+    sk.rotation.z = 0.1 * i;
+    sk.castShadow = true;
+    group.add(sk);
+  }
+  cobweb(group, 89.4, 7.6, 1.5);
+  debris(group, 84, 8, 8, 0x3a2f22, -0.8);
 
   const larl = new THREE.PointLight(0x7a5c2c, 85, 20, 1.6);
   larl.position.set(83, 6.5, 2.4);

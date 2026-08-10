@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing, Zone,
+  bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
+  FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
+  writing, Zone,
 } from "../build";
 
 // FLOOR 6 — THE FLOODED BATHS. Black water to the ankles, and something
@@ -90,6 +91,27 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     type: "hide", trigger: box(28.4, 1, -0.6, 1.1, 1, 1.2), label: "hide in the stall",
     hidePoint: new THREE.Vector3(28.4, 0, -2.4), hidePose: "stand",
   });
+  // Soap, tooth mugs, a flannel over every basin — four children's worth,
+  // set out by somebody who expected them at bedtime.
+  for (let i = 0; i < 4; i++) {
+    const sx = 14 + i * 4.4;
+    const soap = solid(group, null, 0.2, 0.09, 0.13, sx - 0.6, 3.5, -2.7, 0x8d8b7c);
+    soap.rotation.y = 0.2;
+    bottles(group, sx + 0.15, 3.45, -2.7, 2, [0x5a6b6a, 0x6a6250], 0.85);
+    cloth(group, sx, 2.55, 0.5, 0.9, 0x6a7570, -2.0, (i % 2 ? 1 : -1) * 0.06);
+  }
+  // A rubber duck on its side in black water
+  const duck = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xa8903f, roughness: 0.8 })
+  );
+  duck.scale.set(1.3, 1, 1);
+  duck.position.set(23.4, 0.2, 0.9);
+  duck.castShadow = true;
+  group.add(duck);
+  picture(group, 26.5, 5.6, 0.85, 1.1);
+  cobweb(group, 12.6, 8.4, 1.5);
+
   const wl = new THREE.PointLight(0x3f6b70, 190, 26, 1.5);
   wl.position.set(21, 7, 2.5);
   group.add(wl);
@@ -122,6 +144,22 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     label: "climb over the rim", climbTopY: 1.5, climbXMin: bathX - 8, climbXMax: bathX + 8,
     climbZ: -1.0,
   });
+
+  // Towels folded on the rim for children who never came to use them,
+  // and a float ring hanging where an adult could reach it and a child could not.
+  for (let i = 0; i < 3; i++)
+    solid(group, null, 0.75, 0.22, 0.5, bathX - 5.5 + i * 5.2, 1.62, -1.0, 0x6d7c78);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.42, 0.11, 8, 18),
+    new THREE.MeshStandardMaterial({ color: 0x8a5a48, roughness: 0.9 })
+  );
+  ring.position.set(bathX + 6.4, 4.6, -D / 2 + 0.4);
+  ring.castShadow = true;
+  group.add(ring);
+  // A long-handled brush left leaning against the rim
+  const brush = solid(group, null, 0.06, 1.9, 0.06, bathX - 7.6, 1.2, -1.2, 0x4a3f33);
+  brush.rotation.z = 0.22;
+  debris(group, bathX, 12, 7, 0x223038, 1.6);
 
   const bl = new THREE.PointLight(0x35707a, 240, 30, 1.5);
   bl.position.set(bathX, 8, 3);
@@ -187,6 +225,24 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     label: "take the battery", mesh: cell,
   });
 
+  // Pressure gauges, a coal scuttle, a shovel — somebody kept this running
+  for (let i = 0; i < 3; i++) {
+    const g1 = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.17, 0.17, 0.07, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x8f8a72, emissive: 0x3a3628, emissiveIntensity: 0.5, roughness: 0.7,
+      })
+    );
+    g1.rotation.x = Math.PI / 2;
+    g1.position.set(61.2 + i * 0.55, 4.5, -1.35);
+    group.add(g1);
+  }
+  solid(group, null, 0.85, 0.6, 0.7, 59.0, 0.3, -3.2, 0x2b2622);
+  const shovel = solid(group, null, 0.07, 1.5, 0.07, 57.8, 0.75, -3.4, 0x453a30);
+  shovel.rotation.z = 0.3;
+  debris(group, 59.5, 3, 7, 0x1b1815, -3.0, 0.8);
+  cobweb(group, 67.6, 7.8, 1.6);
+
   const bol = new THREE.PointLight(0x7a5230, 160, 22, 1.6);
   bol.position.set(61, 4, 2.4);
   group.add(bol);
@@ -229,6 +285,23 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     label: "pick up the tin cup", mesh: cup, tag: "throwable",
   });
   writing(group, "throw something. it goes to the noise.", 74, 6.4, 5.2, "#7b8f96");
+
+  // A washing line of pegs, a washboard, baskets — and four sets of very
+  // small clothes still waiting to be taken in.
+  const line = solid(group, null, 12.5, 0.02, 0.02, 75.5, 5.1, -0.4, 0x6a6558);
+  line.rotation.z = 0.012;
+  for (let i = 0; i < 6; i++) {
+    solid(group, null, 0.05, 0.14, 0.05, 70.4 + i * 1.9, 5.05, -0.4, 0x8a8270);
+  }
+  for (const [cx, cw, ch, cc] of [
+    [71.2, 0.65, 0.9, 0x6f7a72], [73.4, 0.55, 0.75, 0x7b7264],
+    [75.8, 0.7, 0.95, 0x67707a], [78.2, 0.5, 0.7, 0x74786a],
+  ] as const) {
+    cloth(group, cx, 5.0 - ch / 2, cw, ch, cc, -0.4, 0.03);
+  }
+  solid(group, null, 0.6, 0.85, 0.12, 77.2, 0.45, -3.2, 0x5a4d3a);
+  solid(group, null, 1.1, 0.55, 0.8, 74.0, 0.28, -3.3, 0x3f4a44);
+  cobweb(group, 81.4, 7.4, 1.3);
 
   const lal = new THREE.PointLight(0x4a5f5a, 150, 22, 1.6);
   lal.position.set(76, 6, 2.6);

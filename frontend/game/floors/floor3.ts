@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing, Zone,
+  box, cloth, cobweb, crayonDrawing, D, debris, divider, fills, FloorBuild,
+  journalPage, makeKey, picture, shell, solid, stairwellDoor, writing, Zone,
 } from "../build";
 
 // FLOOR 3 — THE CORRIDORS. Rusted reds, and the longest emptiest floor in
@@ -61,6 +61,32 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
     climbTopY: 1.3, climbXMin: 12.4, climbXMax: 24.5, climbZ: -2.2,
   });
   writing(group, "stay off the boards", 20, 4.4, 4.0, "#a8705c");
+
+  // Doors all down the corridor. None of them open. They have handles and
+  // hinges and keyholes and there is nothing behind any of them.
+  for (const dx of [16.5, 22.5, 44.5, 52, 66, 78, 92, 98]) {
+    solid(group, null, 1.5, 3.4, 0.16, dx, 1.7, -D / 2 + 0.14, 0x2c1e1a);
+    solid(group, null, 1.68, 0.14, 0.2, dx, 3.47, -D / 2 + 0.17, 0x38271f);
+    const knob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.075, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x7a6134, roughness: 0.6, metalness: 0.45 })
+    );
+    knob.position.set(dx + 0.52, 1.5, -D / 2 + 0.24);
+    group.add(knob);
+  }
+  // A runner carpet down the middle, worn through in the centre
+  const runner = new THREE.Mesh(
+    new THREE.PlaneGeometry(84, 2.0),
+    new THREE.MeshStandardMaterial({ color: 0x35211d, roughness: 1 })
+  );
+  runner.rotation.x = -Math.PI / 2;
+  runner.position.set(56, 0.012, -1.4);
+  group.add(runner);
+  picture(group, 19.5, 4.6, 0.85, 1.1);
+  picture(group, 35.5, 4.8, 0.75, 1.0);
+  picture(group, 88.5, 4.6, 0.9, 1.15);
+  cobweb(group, 12.4, 8.4, 1.6);
+  cobweb(group, 70.5, 8.0, 1.4);
   rug(group, zones, 24.5, 5);
 
   // Segment B (26–41): a parlour — armchairs and a mantel ledge
@@ -81,6 +107,32 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
   );
   fire.position.set(33, 1.0, -3.9);
   group.add(fire);
+  // The parlour is dressed for a family: fire irons, a mantel clock stopped,
+  // a tea tray laid for four, a standing lamp nobody switched off.
+  for (let i = 0; i < 3; i++) {
+    const iron = solid(group, null, 0.05, 1.0, 0.05, 35.4 + i * 0.14, 0.5, -3.6, 0x3a3028);
+    iron.rotation.z = 0.05 * i - 0.05;
+  }
+  const mclock = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.62, 0.24),
+    new THREE.MeshStandardMaterial({
+      color: 0x4a382c, emissive: 0x241a12, emissiveIntensity: 0.5, roughness: 1,
+    })
+  );
+  mclock.position.set(33, 2.96, -3.4);
+  mclock.castShadow = true;
+  group.add(mclock);
+  solid(group, null, 1.1, 0.07, 0.75, 31.2, 2.78, -3.3, 0x54463a);
+  for (let i = 0; i < 4; i++) {
+    const c = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.055, 0.09, 8),
+      new THREE.MeshStandardMaterial({ color: 0x7d7466, roughness: 0.9 })
+    );
+    c.position.set(30.8 + (i % 2) * 0.35, 2.86, -3.45 + Math.floor(i / 2) * 0.3);
+    group.add(c);
+  }
+  cloth(group, 30.0, 1.5, 1.0, 1.4, 0x4a2f28, -1.8, 0.12);
+
   const fl = new THREE.PointLight(0xa04a20, 90, 18, 1.7);
   fl.position.set(33, 1.6, -2.6);
   group.add(fl);

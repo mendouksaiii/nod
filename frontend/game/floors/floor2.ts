@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
-  box, crayonDrawing, D, divider, fills, FloorBuild, journalPage,
-  makeKey, shell, solid, stairwellDoor, writing, Zone,
+  bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
+  FloorBuild, journalPage, makeKey, shell, solid, stairwellDoor, writing, Zone,
 } from "../build";
 
 // FLOOR 2 — THE MIRROR FLOOR. Cold silvers over rot. The thing here wears
@@ -106,6 +106,34 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
     type: "hide", trigger: box(21.8, 0.6, -0.4, 1.3, 0.6, 1.0),
     label: "hide under the console", hidePoint: new THREE.Vector3(21.8, 0, -1.8), hidePose: "crawl",
   });
+  // Furniture already under dust sheets — somebody was closing this floor up
+  // and stopped halfway through. A chandelier hangs low, unlit and dulled.
+  for (const [sx, sw] of [[16.8, 1.7], [22.6, 2.1]] as const) {
+    solid(group, colliders, sw, 0.9, 1.6, sx, 0.45, -1.9, 0x3d4048);
+    cloth(group, sx, 0.72, sw + 0.5, 1.5, 0x5f636a, -1.1, 0.03);
+  }
+  const chand = new THREE.Group();
+  chand.add(solid(chand, null, 0.09, 1.5, 0.09, 0, 0.75, 0, 0x3a3b42));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const arm = solid(chand, null, 0.6, 0.05, 0.05, Math.cos(a) * 0.35, 0, Math.sin(a) * 0.35, 0x3a3b42);
+    arm.rotation.y = -a;
+    const drop = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.07),
+      new THREE.MeshStandardMaterial({
+        color: 0x8a93a6, emissive: 0x2a3140, emissiveIntensity: 0.6,
+        roughness: 0.2, metalness: 0.5,
+      })
+    );
+    drop.position.set(Math.cos(a) * 0.6, -0.14, Math.sin(a) * 0.6);
+    chand.add(drop);
+  }
+  chand.position.set(19.5, 8.4, -1.6);
+  chand.traverse((m) => { m.castShadow = true; });
+  group.add(chand);
+  cobweb(group, 12.4, 8.6, 1.7);
+  debris(group, 25, 5, 6, 0x2f3138, -0.7);
+
   const hl = new THREE.PointLight(0x54607a, 100, 22, 1.5);
   hl.position.set(19, 8, 3);
   group.add(hl);
@@ -120,6 +148,24 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
     hidePoint: new THREE.Vector3(35.5, 0, -2.0), hidePose: "stand",
   });
   mirror(40, 5.5, 2.4);
+  // A dressing table with the drawers pulled out and emptied, hairbrushes,
+  // scent bottles, and a stool pushed back as if somebody stood up quickly.
+  solid(group, colliders, 2.4, 1.4, 1.0, 32.6, 0.7, -3.2, FRAME);
+  solid(group, null, 1.9, 0.16, 0.6, 32.6, 1.0, -2.5, 0x353840);
+  bottles(group, 31.9, 1.42, -3.2, 5, [0x6e7a8c, 0x7a6e80, 0x5f6b78], 1.05);
+  const brush = solid(group, null, 0.28, 0.06, 0.12, 33.4, 1.44, -2.9, 0x4a4038);
+  brush.rotation.y = 0.5;
+  const dstool = solid(group, colliders, 0.6, 0.5, 0.6, 33.9, 0.25, -1.9, FRAME);
+  dstool.rotation.y = 0.35;
+  // Coat hangers, empty, still swinging distance apart
+  solid(group, null, 2.4, 0.06, 0.06, 38.4, 5.2, -2.4, 0x3a3d45);
+  for (let i = 0; i < 5; i++) {
+    const hg = solid(group, null, 0.34, 0.03, 0.03, 37.4 + i * 0.5, 5.02, -2.4, 0x53565e);
+    hg.rotation.z = 0.05 * (i % 2 ? 1 : -1);
+    solid(group, null, 0.02, 0.18, 0.02, 37.4 + i * 0.5, 5.12, -2.4, 0x53565e);
+  }
+  cloth(group, 41.8, 3.4, 1.1, 2.6, 0x4a4c56, -2.2, 0.05);
+
   const dl = new THREE.PointLight(0x4c5670, 90, 20, 1.6);
   dl.position.set(37, 7, 2.6);
   group.add(dl);
