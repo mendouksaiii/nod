@@ -293,8 +293,12 @@ export class Theo {
       this.bear.add(body, head, muzzle, ...ears, armA, armB, legA, legB);
       this.bear.traverse((m) => { m.castShadow = true; });
       // Tucked against his chest on the left, tilted like a held thing
-      this.bear.position.set(0.1, 0.16, 0.15);
-      this.bear.rotation.set(0.2, 0.4, -0.55);
+      // Clear of the torso capsule (radius 0.165 about the body axis) and out
+      // in the crook of the forward arm — sunk any closer and he reads as
+      // holding nothing at all.
+      this.bear.position.set(-0.2, 0.1, 0.24);
+      this.bear.rotation.set(0.15, 0.5, -0.5);
+      this.bear.scale.setScalar(1.3);
       this.bear.visible = false; // until he picks it up off the pillow
       hipRoot.add(this.bear);
     }
@@ -715,8 +719,11 @@ export class Theo {
     this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, sneaking ? 0.3 : 0.16, 8, dt);
 
     // Bear: pulled in and up against his chest as the dread rises
-    this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, 0.16 + clutch * 0.05, 7, dt);
-    this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, 0.1 - clutch * 0.03, 7, dt);
+    // Belly height, so the raised torch arm sweeps above it rather than through
+    this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, 0.1 + clutch * 0.05, 7, dt);
+    // Negative x sits it on the camera side of his body, so the raised torch
+    // arm passes behind the bear instead of straight through it.
+    this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, -0.2 - clutch * 0.03, 7, dt);
     this.bear.rotation.z = THREE.MathUtils.damp(
       this.bear.rotation.z, -0.55 - clutch * 0.25 + Math.sin(p) * stride * 0.06, 8, dt
     );
