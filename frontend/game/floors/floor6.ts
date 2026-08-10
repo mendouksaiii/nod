@@ -73,6 +73,16 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     });
   }
   writing(group, "she hears you cry", 26, 5.2, 3.4, "#8ba0a6");
+  // Tom's shoes, set down neatly at the water's edge by someone who meant
+  // to come back for them.
+  for (const [sx, rot] of [[17.4, 0.05], [17.78, -0.03]] as const) {
+    const shoe = solid(group, null, 0.3, 0.12, 0.18, sx, 0.06, 1.4, 0x2a2f3c);
+    shoe.rotation.y = rot;
+  }
+  interactables.push({
+    type: "read", trigger: box(17.6, 1.0, 1.0, 1.2, 1.3, 1.6),
+    label: "look at the shoes", tag: "note:shoes",
+  });
 
   const stall = solid(group, colliders, 2.2, 5.5, 2.4, 28.4, 2.75, -2.6, TILE);
   stall.name = "stall";

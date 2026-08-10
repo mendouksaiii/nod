@@ -193,6 +193,73 @@ export const WREN_PAGES: Record<number, string> = {
   1: "there is a door at the end and there is real light under it.\nthe rooms on the way are warm and they say things\nand i am so tired.\nit's not what you think. it's —",
 };
 
+/**
+ * Everything else the children left. Wren's pages tell you how to survive;
+ * these tell you who else was here, and — on the mirror floor — begin the
+ * quiet argument about whether the bear under your arm was ever yours.
+ */
+export const FOUND_TEXT: Record<string, string> = {
+  // Floor 7 — the room he wakes in
+  "note:chart": [
+    "pencil marks up the doorframe, one above the other.",
+    "",
+    "        wren   ——————   this tall",
+    "        tom    ————     this tall",
+    "        ivy    ———      this tall",
+    "",
+    "and one more, fresh, at the bottom.",
+    "nobody wrote a name beside it.",
+  ].join("\n"),
+
+  // Floor 6 — Tom
+  "note:shoes": [
+    "a pair of shoes set side by side at the water's edge,",
+    "laces tucked in, the way you leave them",
+    "when you mean to come back for them.",
+    "",
+    "they are much too small to be yours.",
+  ].join("\n"),
+
+  // Floor 5 — Ivy
+  "note:ivy": [
+    "scratched into the shelf, low down, where an adult would not look:",
+    "",
+    "  IVY WAS HERE AND IVY IS STILL HERE",
+    "  I AM NOT HUNGRY ANY MORE",
+    "  I AM NOT ANYTHING ANY MORE",
+    "",
+    "the letters get rounder and softer toward the end,",
+    "like whoever wrote them was forgetting how.",
+  ].join("\n"),
+
+  // Floor 4 — the house's own record of itself
+  "note:ledger": [
+    "a ledger, in an adult's handwriting. the only adult writing",
+    "anywhere in this house.",
+    "",
+    "  arrived 14th — settled 2nd floor",
+    "  arrived 3rd  — settled 5th floor",
+    "  arrived 9th  — settled 3rd floor",
+    "  arrived 27th — reached the ground floor",
+    "",
+    "the last line is scored out so hard the paper has torn.",
+  ].join("\n"),
+
+  // Floor 2 — the bear
+  "note:bear": [
+    "you hold the bear up so you can both be in the glass.",
+    "",
+    "there is a name tape stitched inside its ear.",
+    "your mother sewed it there. you remember her doing it.",
+    "you remember the kitchen table and the light and her hands.",
+    "",
+    "the name on the tape is not your name.",
+    "",
+    "you look at your own face in the glass for a long time",
+    "and you cannot remember what it is supposed to look like either.",
+  ].join("\n"),
+};
+
 export function journalPage(
   group: THREE.Group,
   x: number,

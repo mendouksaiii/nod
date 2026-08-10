@@ -6,7 +6,7 @@ import { Entity } from "./entity";
 import { FloorBuild, FloorContext, Interactable, writing } from "./build";
 import { buildFloor, BOTTOM_FLOOR, FLOOR_TITLES, TOP_FLOOR } from "./floors";
 import { NodAudio, Surface } from "./audio";
-import { WREN_PAGES } from "./build";
+import { FOUND_TEXT, WREN_PAGES } from "./build";
 
 /**
  * What the game needs from the house on Base. Kept as an interface so the
@@ -399,6 +399,14 @@ export class NodGame {
         break;
       }
       case "carry":
+        // The bear is not cargo — it goes into his arm and stays there
+        if (it.tag === "bear") {
+          this.theo.takeBear();
+          it.consumed = true;
+          it.mesh?.parent?.remove(it.mesh);
+          this.audio.keyTaken();
+          break;
+        }
         this.theo.pickUp(it);
         if (it.isKey) {
           this.hasKey = true;
@@ -436,9 +444,13 @@ export class NodGame {
         }
         break;
       case "read": {
-        // Wren's page. The only voice in the game.
-        const page = WREN_PAGES[this.floorNumber];
+        // Wren's pages are the spine; FOUND_TEXT holds everything else the
+        // children left behind — labels, lists, the tag on the bear.
+        const page = it.tag && FOUND_TEXT[it.tag]
+          ? FOUND_TEXT[it.tag]
+          : WREN_PAGES[this.floorNumber];
         if (page) {
+          if (it.tag && FOUND_TEXT[it.tag]) it.consumed = true;
           this.readingPage = true;
           this.hud.page.textContent = page;
           this.hud.page.style.opacity = "1";
@@ -595,6 +607,8 @@ export class NodGame {
     const tier = this.theo.speedTier;
     s.effort = tier === "run" ? 1 : tier === "walk" ? 0.55 : tier === "sneak" ? 0.2 : 0;
     s.dread = this.entity?.suspicion ?? 0;
+    // He holds the bear tighter the closer it gets to finding him
+    this.theo.fear = s.dread;
     s.hidden = this.theo.hidden;
     s.battery = this.theo.battery;
     s.flashOn = this.theo.flashOn;

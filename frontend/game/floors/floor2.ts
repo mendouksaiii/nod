@@ -162,6 +162,14 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
     climbTopY: 1.5, climbXMin: 62.4, climbXMax: 67.6, climbZ: -2.4,
   });
   const bigMirror = mirror(65, 7.5, 3.6);
+  // The floor that takes faces and names is the floor where you finally read
+  // the name tape stitched into the bear's ear.
+  // Stand just off to the side of the vanity glass — clear of the trigger
+  // for draping it, so covering the mirror never steals this moment.
+  interactables.push({
+    type: "read", trigger: box(68.4, 1.2, -0.6, 1.3, 1.5, 2.0),
+    label: "hold the bear up to the glass", tag: "note:bear",
+  });
   writing(group, "my name is wren. i am going home.", 69, 6.4, 5.8, "#9aa4b4");
   journalPage(group, 71.2, 0.5);
   const vl = new THREE.PointLight(0x5a6480, 95, 22, 1.5);

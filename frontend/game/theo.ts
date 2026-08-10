@@ -34,6 +34,18 @@ export class Theo {
   private elbowR = new THREE.Group();
   private torso!: THREE.Mesh;
   private hipRoot = new THREE.Group();
+  private drawstrings: THREE.Mesh[] = [];
+  /** The bear. He came in holding it and he has not let go. */
+  private bear = new THREE.Group();
+  /** 0..1 — how frightened he is. Tightens his grip on the bear. */
+  fear = 0;
+  /** He can leave without it. Some of them did. */
+  hasBear = false;
+
+  takeBear() {
+    this.hasBear = true;
+    this.bear.visible = true;
+  }
   private neck = new THREE.Group();
   private handAnchor = new THREE.Group();
 
@@ -71,23 +83,46 @@ export class Theo {
 
   constructor(scene: THREE.Scene) {
     const skin = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 1 });
-    const pajama = new THREE.MeshStandardMaterial({ color: 0x8f8aa3, roughness: 1 });
+    // The one warm thing in the whole house. A faded clay hoodie reads at any
+    // distance and against every floor's palette — the house is cold, he isn't.
+    const pajama = new THREE.MeshStandardMaterial({ color: 0x7d4a40, roughness: 1 });
+    const hoodDark = new THREE.MeshStandardMaterial({ color: 0x63392f, roughness: 1 });
 
     // Torso tapers up — narrow shoulders, soft belly. Pivots at the hips.
-    this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.155, 0.28, 4, 10), pajama);
+    this.torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.165, 0.28, 4, 10), pajama);
     this.torso.position.y = 0.17;
     this.torso.castShadow = true;
 
-    const collar = new THREE.Mesh(new THREE.SphereGeometry(0.125, 12, 10), pajama);
+    // Kangaroo pocket — the small detail that makes it a hoodie and not a shirt
+    const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.11, 0.09), hoodDark);
+    pocket.position.set(0.1, 0.06, 0);
+    pocket.castShadow = true;
+
+    const collar = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), pajama);
     collar.position.y = 0.35;
     collar.scale.set(1, 0.62, 1);
     collar.castShadow = true;
+
+    // The hood itself, bunched down behind his neck. Two drawstrings hang
+    // from it and swing when he runs.
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.185, 14, 12), hoodDark);
+    hood.scale.set(0.82, 0.9, 1.0);
+    hood.position.set(-0.09, 0.36, 0);
+    hood.castShadow = true;
+    for (const sz of [0.05, -0.05]) {
+      const string = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.011, 0.12, 3, 6),
+        new THREE.MeshStandardMaterial({ color: 0xbdb0a0, roughness: 1 })
+      );
+      string.position.set(0.1, 0.27, sz);
+      this.drawstrings.push(string);
+    }
 
     // Hip root: everything above the legs hangs off this, so a crouch or a
     // lean moves the whole upper body without detaching the feet.
     const hipRoot = this.hipRoot;
     hipRoot.position.y = 0.44;
-    hipRoot.add(this.torso, collar);
+    hipRoot.add(this.torso, pocket, collar, hood, ...this.drawstrings);
 
     // Neck pivot so the head can lead turns and counter-bob
     this.neck.position.y = 0.4;
@@ -151,6 +186,47 @@ export class Theo {
     }
 
     this.body.add(hipRoot);
+
+    // ── The bear ──
+    // Held in the crook of his left arm, always. It is the reason he only
+    // ever has one hand free, and the first thing the house will try to take.
+    {
+      const fur = new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 1 });
+      const furDark = new THREE.MeshStandardMaterial({ color: 0x6b5943, roughness: 1 });
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.062, 0.05, 4, 8), fur);
+      body.castShadow = true;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), fur);
+      head.position.y = 0.09;
+      head.castShadow = true;
+      const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), furDark);
+      muzzle.position.set(0.042, 0.075, 0);
+      const ears = [0.035, -0.035].map((z) => {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), furDark);
+        ear.position.set(-0.005, 0.128, z);
+        return ear;
+      });
+      // One arm hangs loose — it has been carried by that arm for a long time
+      const limbGeo = new THREE.CapsuleGeometry(0.018, 0.035, 3, 6);
+      const armA = new THREE.Mesh(limbGeo, fur);
+      armA.position.set(0.01, 0.03, 0.062);
+      armA.rotation.x = -0.5;
+      const armB = new THREE.Mesh(limbGeo, fur);
+      armB.position.set(0.01, 0.03, -0.062);
+      armB.rotation.x = 0.9;
+      const legA = new THREE.Mesh(limbGeo, fur);
+      legA.position.set(0.02, -0.06, 0.032);
+      legA.rotation.z = 0.6;
+      const legB = new THREE.Mesh(limbGeo, fur);
+      legB.position.set(0.02, -0.06, -0.032);
+      legB.rotation.z = 0.9;
+      this.bear.add(body, head, muzzle, ...ears, armA, armB, legA, legB);
+      this.bear.traverse((m) => { m.castShadow = true; });
+      // Tucked against his chest on the left, tilted like a held thing
+      this.bear.position.set(0.1, 0.16, 0.15);
+      this.bear.rotation.set(0.2, 0.4, -0.55);
+      this.bear.visible = false; // until he picks it up off the pillow
+      hipRoot.add(this.bear);
+    }
 
     // Two-handed too-big flashlight, parented to the right forearm
     const torch = new THREE.Mesh(
@@ -502,31 +578,29 @@ export class Theo {
       this.hipR.rotation.x -= 0.2;
     }
 
-    // ── Arms: opposite the legs, elbows carrying a soft child's bend ──
+    // ── Arms ──
+    // The left arm is not available. It is holding the bear, and it holds it
+    // tighter the more frightened he is. Everything else — the torch, the
+    // key, whatever he picks up — has to happen with the right hand alone.
     const carrying = !!this.carried;
     const holdingUp = this.flashOn && this.battery > 0;
     const armSwing = stride * 0.72;
-    let shL = sw * armSwing;
-    let shR = -sw * armSwing;
-    let elL = 0.3 + Math.max(0, sw) * 0.35;
-    let elR = 0.3 + Math.max(0, -sw) * 0.35;
 
+    const clutch = THREE.MathUtils.clamp(this.fear, 0, 1);
+    const shL = -0.62 - clutch * 0.3 + sw * armSwing * 0.12;
+    const elL = 1.15 + clutch * 0.35;
+
+    let shR = -sw * armSwing;
+    let elR = 0.3 + Math.max(0, -sw) * 0.35;
     if (carrying) {
-      // Both arms come up and forward, clutching it to the chest
-      shL = -0.85 + sw * 0.06;
-      shR = -0.85 - sw * 0.06;
-      elL = elR = 1.05;
+      shR = -0.9 - sw * 0.05;
+      elR = 1.0;
     } else if (holdingUp) {
-      // Right arm out with the torch, left steadying it — two-handed grip
       shR = -1.02 - sw * 0.04;
       elR = 0.5;
-      shL = -0.78 + sw * 0.05;
-      elL = 0.95;
     } else if (sneaking) {
-      // Tucked in, elbows close — bracing himself
-      shL = 0.12 + sw * armSwing * 0.5;
       shR = 0.12 - sw * armSwing * 0.5;
-      elL = elR = 0.75;
+      elR = 0.75;
     }
 
     const armDamp = 9;
@@ -534,9 +608,21 @@ export class Theo {
     this.shoulderR.rotation.x = THREE.MathUtils.damp(this.shoulderR.rotation.x, shR, armDamp, dt);
     this.elbowL.rotation.x = THREE.MathUtils.damp(this.elbowL.rotation.x, elL, armDamp, dt);
     this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, elR, armDamp, dt);
-    // Arms hang slightly away from the body, more so when tense
-    this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, sneaking ? -0.3 : -0.16, 8, dt);
+    // The bear-arm stays tucked in; the free arm hangs away from the body
+    this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, -0.34 - clutch * 0.1, 8, dt);
     this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, sneaking ? 0.3 : 0.16, 8, dt);
+
+    // Bear: pulled in and up against his chest as the dread rises
+    this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, 0.16 + clutch * 0.05, 7, dt);
+    this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, 0.1 - clutch * 0.03, 7, dt);
+    this.bear.rotation.z = THREE.MathUtils.damp(
+      this.bear.rotation.z, -0.55 - clutch * 0.25 + Math.sin(p) * stride * 0.06, 8, dt
+    );
+
+    // Drawstrings swing with the stride
+    for (let i = 0; i < this.drawstrings.length; i++) {
+      this.drawstrings[i].rotation.z = Math.sin(p + i * 0.6) * stride * 0.35 - 0.08;
+    }
 
     // ── Torso: forward lean into travel, hunch when sneaking, breathing ──
     this.breathT += dt * (moving ? 2.6 : 1.15);

@@ -95,6 +95,11 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
     }
   }
   writing(group, "keep something smelly between you and it", 40, 9.4, 6.2, "#9a8a5c");
+  // Scratched low on the shelf, where only a child would ever look.
+  interactables.push({
+    type: "read", trigger: box(32, 1.0, -1.0, 2.0, 1.3, 1.8),
+    label: "read the scratches on the shelf", tag: "note:ivy",
+  });
   const sl = new THREE.PointLight(0x8a7434, 100, 24, 1.5);
   sl.position.set(36, 9.5, 3);
   group.add(sl);

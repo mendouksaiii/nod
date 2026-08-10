@@ -24,22 +24,142 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   divider(group, colliders, 58);
   divider(group, colliders, 76);
 
-  // ── The landing: the sealed way up ──
-  solid(group, null, 2.6, 5.2, 0.14, 4.5, 2.6, -D / 2 + 0.09, 0x11151d);
-  solid(group, null, 3.0, 0.22, 0.2, 4.5, 5.3, -D / 2 + 0.12, DARK);
-  solid(group, null, 0.22, 5.2, 0.2, 3.1, 2.6, -D / 2 + 0.12, DARK);
-  solid(group, null, 0.22, 5.2, 0.2, 5.9, 2.6, -D / 2 + 0.12, DARK);
-  const b1 = solid(group, null, 3.2, 0.3, 0.1, 4.5, 3.4, -D / 2 + 0.18, 0x2c3040);
-  b1.rotation.z = 0.14;
-  const b2 = solid(group, null, 3.2, 0.3, 0.1, 4.5, 1.9, -D / 2 + 0.18, 0x2c3040);
-  b2.rotation.z = -0.1;
-  writing(group, "nod", 6.9, 2.1, 1.1, "#5d6579");
-  writing(group, "the stairs only go down", 6.2, 4.6, 3.6);
-  solid(group, null, 5, 0.05, 3.2, 6.5, 0.025, 0.4, 0x2a2733);
-  solid(group, colliders, 1.1, 1.15, 1.1, 9.8, 0.575, -2.6, FURNITURE);
-  const lamp = new THREE.PointLight(0x8a7a5e, 90, 18, 1.5);
-  lamp.position.set(5, 6, 1.5);
+  // ══ THE ROOM HE WAKES IN (0–12) ══
+  // Everything here is his size. It is the only room in the whole house that
+  // fits him, which is exactly why the cot next door is so wrong. It is very
+  // nearly his own bedroom. It is not his bedroom.
+
+  const BEDX = 3.9;
+  const BEDZ = -2.6;
+  const linen = 0x6d6f7d;
+
+  // Bed: frame on four short legs, mattress, covers thrown back where he got out
+  solid(group, colliders, 2.5, 0.28, 1.5, BEDX, 0.42, BEDZ, 0x2f2a2e);
+  for (const lx of [BEDX - 1.1, BEDX + 1.1])
+    for (const lz of [BEDZ - 0.6, BEDZ + 0.6])
+      solid(group, null, 0.14, 0.28, 0.14, lx, 0.14, lz, 0x241f23);
+  solid(group, null, 2.35, 0.22, 1.36, BEDX, 0.67, BEDZ, linen);
+  // headboard
+  solid(group, colliders, 0.16, 0.95, 1.5, BEDX - 1.25, 0.9, BEDZ, 0x2f2a2e);
+  // the covers, shoved down to the foot of the bed in a heap
+  const covers = solid(group, null, 1.0, 0.3, 1.4, BEDX + 0.6, 0.9, BEDZ, 0x5c5e6b);
+  covers.rotation.z = -0.08;
+  const pillow = solid(group, null, 0.62, 0.17, 0.86, BEDX - 0.85, 0.86, BEDZ, 0x7e808c);
+  pillow.rotation.z = 0.06;
+  interactables.push({
+    type: "climb", trigger: box(BEDX + 1.55, 0.6, BEDZ, 0.55, 0.7, 1.0),
+    label: "climb onto the bed",
+    climbTopY: 0.78, climbXMin: BEDX - 1.0, climbXMax: BEDX + 1.1, climbZ: BEDZ,
+  });
+
+  // The bear, waiting on the pillow where he left it when he woke
+  const bear = new THREE.Group();
+  {
+    const fur = new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 1 });
+    const furDark = new THREE.MeshStandardMaterial({ color: 0x6b5943, roughness: 1 });
+    const bod = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.06, 4, 8), fur);
+    const hd = new THREE.Mesh(new THREE.SphereGeometry(0.066, 10, 8), fur);
+    hd.position.y = 0.108;
+    const mz = new THREE.Mesh(new THREE.SphereGeometry(0.031, 8, 6), furDark);
+    mz.position.set(0.05, 0.09, 0);
+    bear.add(bod, hd, mz);
+    for (const z of [0.042, -0.042]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), furDark);
+      ear.position.set(-0.006, 0.153, z);
+      bear.add(ear);
+    }
+    bear.traverse((m) => { m.castShadow = true; });
+    bear.position.set(BEDX - 0.8, 1.03, BEDZ + 0.05);
+    bear.rotation.z = 1.35; // lying on its side
+    group.add(bear);
+  }
+  interactables.push({
+    // Reachable from the walk lane as well as from up on the bed — a child
+    // can reach a pillow, and this must not be missable.
+    type: "carry", trigger: box(BEDX - 0.7, 1.0, -1.3, 1.5, 1.0, 1.7),
+    label: "take the bear", mesh: bear, tag: "bear",
+  });
+
+  // Slippers, kicked off beside the bed. Both facing the wrong way.
+  for (const [sx, sz, rot] of [[BEDX + 0.3, -1.55, 0.4], [BEDX + 0.62, -1.42, -0.9]] as const) {
+    const sl = solid(group, null, 0.26, 0.1, 0.16, sx, 0.05, sz, 0x4a4048);
+    sl.rotation.y = rot;
+  }
+
+  // Bedside table and the lamp that is the only warm light on this floor
+  solid(group, colliders, 0.7, 0.62, 0.66, 6.0, 0.31, -3.0, FURNITURE);
+  const lampBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.11, 0.16, 10),
+    new THREE.MeshStandardMaterial({ color: 0x453b33, roughness: 1 })
+  );
+  lampBase.position.set(6.0, 0.7, -3.0);
+  const shade = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.19, 0.26, 0.26, 12, 1, true),
+    new THREE.MeshStandardMaterial({
+      color: 0xd8bb86, emissive: 0xc19a52, emissiveIntensity: 0.9,
+      roughness: 1, side: THREE.DoubleSide,
+    })
+  );
+  shade.position.set(6.0, 0.92, -3.0);
+  group.add(lampBase, shade);
+  const lamp = new THREE.PointLight(0xd8a355, 120, 15, 1.6);
+  lamp.position.set(6.0, 0.95, -2.6);
+  lamp.castShadow = true;
   group.add(lamp);
+
+  // A glass of water nobody drank
+  const glass = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.038, 0.11, 8),
+    new THREE.MeshStandardMaterial({
+      color: 0x8fa3b0, roughness: 0.2, transparent: true, opacity: 0.55,
+    })
+  );
+  glass.position.set(5.75, 0.68, -2.78);
+  group.add(glass);
+
+  // Rug, and a small chair with clothes over the back
+  solid(group, null, 3.4, 0.04, 2.2, 6.2, 0.02, -0.7, 0x322b2f);
+  solid(group, colliders, 0.62, 0.5, 0.62, 8.0, 0.25, -3.0, FURNITURE);
+  const clothes = solid(group, null, 0.7, 0.55, 0.2, 8.0, 0.72, -3.2, 0x4e4753);
+  clothes.rotation.z = 0.1;
+
+  // A window that should show the garden and shows a flat grey nothing
+  const voidPane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.5, 1.9),
+    new THREE.MeshStandardMaterial({
+      color: 0x2b3038, emissive: 0x3a414c, emissiveIntensity: 0.7, roughness: 1,
+    })
+  );
+  voidPane.position.set(1.6, 2.4, -D / 2 + 0.03);
+  group.add(voidPane);
+  solid(group, null, 1.72, 0.09, 0.1, 1.6, 3.4, -D / 2 + 0.07, DARK);
+  solid(group, null, 1.72, 0.09, 0.1, 1.6, 1.42, -D / 2 + 0.07, DARK);
+  solid(group, null, 0.09, 2.0, 0.1, 1.6, 2.4, -D / 2 + 0.07, DARK);
+
+  // ── The sealed way up ──
+  solid(group, null, 2.6, 5.2, 0.14, 9.8, 2.6, -D / 2 + 0.09, 0x11151d);
+  solid(group, null, 3.0, 0.22, 0.2, 9.8, 5.3, -D / 2 + 0.12, DARK);
+  solid(group, null, 0.22, 5.2, 0.2, 8.4, 2.6, -D / 2 + 0.12, DARK);
+  solid(group, null, 0.22, 5.2, 0.2, 11.2, 2.6, -D / 2 + 0.12, DARK);
+  const b1 = solid(group, null, 3.2, 0.3, 0.1, 9.8, 3.4, -D / 2 + 0.18, 0x2c3040);
+  b1.rotation.z = 0.14;
+  const b2 = solid(group, null, 3.2, 0.3, 0.1, 9.8, 1.9, -D / 2 + 0.18, 0x2c3040);
+  b2.rotation.z = -0.1;
+  // Boarded from THIS side. Somebody nailed it shut to keep something out,
+  // or to keep the children in. The nails are on the inside.
+  writing(group, "nod", 11.0, 1.4, 1.0, "#5d6579");
+  // Height marks up the doorframe. Three names, and a fourth mark with none.
+  for (let i = 0; i < 4; i++) {
+    solid(group, null, 0.34, 0.025, 0.06, 8.62, 0.62 + i * 0.42, -D / 2 + 0.15, 0x6a7183);
+  }
+  interactables.push({
+    type: "read", trigger: box(8.6, 1.2, -2.2, 1.1, 1.4, 2.2),
+    label: "look at the marks on the doorframe", tag: "note:chart",
+  });
+  writing(group, "the stairs only go down", 9.6, 6.0, 3.6);
+  const lamp2 = new THREE.PointLight(0x53607e, 55, 16, 1.6);
+  lamp2.position.set(9.5, 5.5, 2.0);
+  group.add(lamp2);
 
   // ── The cot room ──
   const cotX = 21.5;

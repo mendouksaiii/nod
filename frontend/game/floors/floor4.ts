@@ -135,6 +135,14 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
     type: "battery", trigger: box(53.5, 2.6, -2.4, 1.2, 0.8, 1.2),
     label: "take the battery", mesh: cell,
   });
+  // The house keeps books. Somebody has been writing all of this down.
+  const ledger = solid(group, null, 0.5, 0.1, 0.36, 48.4, 1.16, -2.0, 0x574a30);
+  ledger.rotation.z = 0.06;
+  interactables.push({
+    type: "read", trigger: box(48.4, 1.1, -1.2, 1.2, 1.3, 1.6),
+    label: "open the ledger", tag: "note:ledger",
+  });
+
   const al2 = new THREE.PointLight(0x4a5f46, 80, 20, 1.6);
   al2.position.set(51, 6.5, 2.6);
   group.add(al2);
