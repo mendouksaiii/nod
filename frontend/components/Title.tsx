@@ -39,6 +39,8 @@ export default function Title() {
   const [message, setMessage] = useState("");
   const hostRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<{ dispose: () => void } | null>(null);
+  /** Set when a run is ready to start; `link: null` means play without the chain. */
+  const [startWith, setStartWith] = useState<{ link: HouseLink | null } | null>(null);
 
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
@@ -49,6 +51,23 @@ export default function Title() {
 
   // Tear the game down if this component ever unmounts
   useEffect(() => () => gameRef.current?.dispose(), []);
+
+  /**
+   * Build the game once the host div is actually on screen. This has to be an
+   * effect rather than a requestAnimationFrame callback in the click handler:
+   * a backgrounded or non-compositing tab throttles rAF to a standstill, and
+   * the game would simply never be constructed.
+   */
+  useEffect(() => {
+    if (phase !== "playing" || !startWith || gameRef.current || !hostRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const { NodGame } = await import("@/game/game");
+      if (cancelled || gameRef.current || !hostRef.current) return;
+      gameRef.current = new NodGame(hostRef.current, startWith.link);
+    })();
+    return () => { cancelled = true; };
+  }, [phase, startWith]);
 
   async function wake() {
     setPhase("connecting");
@@ -76,6 +95,17 @@ export default function Title() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, isConnected, walletClient, publicClient]);
 
+  /**
+   * Play with no chain at all. The house still works — it just does not
+   * remember you, and the floors below are not sealed against you. This has
+   * to exist: without it, anyone with no wallet, no testnet ether or the
+   * wrong network simply cannot play the game.
+   */
+  function startOffline() {
+    setStartWith({ link: null });
+    setPhase("playing");
+  }
+
   async function beginRun() {
     if (!walletClient || !publicClient || !address) return;
     setPhase("waking");
@@ -99,12 +129,8 @@ export default function Title() {
         setMessage(`you were on the ${run.floor}th floor…`);
       }
 
+      setStartWith({ link });
       setPhase("playing");
-      const { NodGame } = await import("@/game/game");
-      // Wait a tick so the canvas host is mounted
-      requestAnimationFrame(() => {
-        if (hostRef.current) gameRef.current = new NodGame(hostRef.current, link);
-      });
     } catch (err: unknown) {
       setPhase("error");
       const raw = err instanceof Error ? err.message : String(err);
@@ -143,6 +169,15 @@ export default function Title() {
           <p style={{ opacity: 0.25, fontSize: "0.7rem", marginTop: "0.6rem" }}>
             the house needs a wallet to learn your name — base sepolia
           </p>
+          <button
+            style={{
+              ...button, marginTop: "0.8rem", fontSize: "0.78rem",
+              letterSpacing: "0.12em", opacity: 0.5, borderColor: "rgba(200,210,190,0.18)",
+            }}
+            onClick={startOffline}
+          >
+            WAKE UP WITHOUT BEING REMEMBERED
+          </button>
         </>
       )}
 
@@ -159,6 +194,16 @@ export default function Title() {
           </p>
           <button style={button} onClick={() => void wake()}>
             TRY AGAIN
+          </button>
+          {/* A failed handshake must never be a dead end */}
+          <button
+            style={{
+              ...button, marginTop: "0.8rem", fontSize: "0.78rem",
+              letterSpacing: "0.12em", opacity: 0.5, borderColor: "rgba(200,210,190,0.18)",
+            }}
+            onClick={startOffline}
+          >
+            GO IN ANYWAY
           </button>
         </>
       )}
