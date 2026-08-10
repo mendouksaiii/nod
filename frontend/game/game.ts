@@ -361,7 +361,8 @@ export class NodGame {
     if (it.type === "read") return 4;
     if (it.type === "carry") return 5;
     if (it.type === "battery") return 6;
-    return 7; // climb — the biggest triggers, so always last
+    if (it.type === "use") return 7;
+    return 8; // climb — the biggest triggers, so always last
   }
 
   private findInteractable(): Interactable | null {
@@ -460,6 +461,18 @@ export class NodGame {
         }
         break;
       }
+      case "use": {
+        // Touching the house is always answered, and always heard.
+        it.onUse?.(this.floor);
+        const n = it.noise ?? 0.5;
+        const c = it.trigger.getCenter(new THREE.Vector3());
+        this.floor.noise = Math.max(this.floor.noise ?? 0, n);
+        this.decoy = { x: c.x, strength: n };
+        this.decoyT = it.sustain ?? 0.9;
+        this.audio.pickup();
+        if (!it.repeatable) it.consumed = true;
+        break;
+      }
       case "door":
         if (it.tag === "settle") this.beginSettle();
         else if (it.tag === "exit") this.beginEscape();
@@ -544,6 +557,10 @@ export class NodGame {
     this.ctx.theoHidden = this.theo.hidden;
     this.ctx.flashOn = this.theo.flashOn;
     this.ctx.decoy = this.decoy;
+
+    // Noise from handling things fades. A floor's own update may override
+    // this (floor 6 holds it high the whole time the bath is draining).
+    if (this.floor.noise) this.floor.noise = Math.max(0, this.floor.noise - dt * 0.85);
 
     this.floor.update?.call(this.floor, dt, this.ctx);
     this.entity?.update(dt, this.theo, this.floor.colliders, this.floor.bounds, this.floor, this.ctx);

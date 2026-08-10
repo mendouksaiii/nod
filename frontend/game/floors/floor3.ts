@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   box, cloth, cobweb, crayonDrawing, D, debris, divider, fills, FloorBuild,
-  journalPage, makeKey, picture, shell, solid, stairwellDoor, writing, Zone,
+  journalPage, makeKey, picture, shell, solid, stairwellDoor, usable, writing, Zone,
 } from "../build";
 
 // FLOOR 3 — THE CORRIDORS. Rusted reds, and the longest emptiest floor in
@@ -132,6 +132,24 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
     group.add(c);
   }
   cloth(group, 30.0, 1.5, 1.0, 1.4, 0x4a2f28, -1.8, 0.12);
+
+  // On this floor noise is not the danger — weight is. Everything you can
+  // knock over here is heavy, and heavy things reach it through the boards.
+  usable(interactables, 35.5, 1.0, -2.6, "knock over the fire irons", 0.95, {
+    tag: "irons", sustain: 2.6, hw: 1.0,
+  });
+  usable(interactables, 31.2, 2.9, -2.4, "rattle the tea tray", 0.7, {
+    tag: "tray", sustain: 1.6, hw: 1.2, hh: 1.0,
+  });
+  usable(interactables, 33, 3.0, -2.6, "wind the mantel clock", 0.35, {
+    tag: "clock", sustain: 6.0, hw: 0.9, hh: 1.0,
+  });
+  // The doors do not open. Trying is loud, and the house lets you try forever.
+  for (const dx of [16.5, 44.5, 66, 92]) {
+    usable(interactables, dx, 1.4, -2.6, "try the door", 0.75, {
+      tag: `door${dx}`, sustain: 1.4, hw: 1.1, hh: 1.6,
+    });
+  }
 
   const fl = new THREE.PointLight(0xa04a20, 90, 18, 1.7);
   fl.position.set(33, 1.6, -2.6);

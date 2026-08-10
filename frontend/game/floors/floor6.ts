@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
   FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
-  writing, Zone,
+  usable, writing, Zone,
 } from "../build";
 
 // FLOOR 6 — THE FLOODED BATHS. Black water to the ankles, and something
@@ -81,7 +81,7 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     shoe.rotation.y = rot;
   }
   interactables.push({
-    type: "read", trigger: box(17.6, 1.0, 1.0, 1.2, 1.3, 1.6),
+    type: "read", trigger: box(16.0, 1.0, 1.0, 0.9, 1.3, 1.6),
     label: "look at the shoes", tag: "note:shoes",
   });
 
@@ -100,6 +100,36 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     bottles(group, sx + 0.15, 3.45, -2.7, 2, [0x5a6b6a, 0x6a6250], 0.85);
     cloth(group, sx, 2.55, 0.5, 0.9, 0x6a7570, -2.0, (i % 2 ? 1 : -1) * 0.06);
   }
+  // ── The taps ──
+  // The best tool on this floor. A running tap is a noise that stays where
+  // you left it, so you can send her to a basin and cross behind her.
+  const taps: { x: number; on: boolean; stream: THREE.Mesh }[] = [];
+  for (let i = 0; i < 4; i++) {
+    const sx = 14 + i * 4.4;
+    const spout = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8),
+      new THREE.MeshStandardMaterial({ color: 0x6b6f74, roughness: 0.5, metalness: 0.5 })
+    );
+    spout.position.set(sx, 3.7, -3.3);
+    group.add(spout);
+    const stream = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.045, 1.05, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0x9fc4cc, emissive: 0x3f6b75, emissiveIntensity: 0.9,
+        transparent: true, opacity: 0.55, roughness: 0.1,
+      })
+    );
+    stream.position.set(sx, 2.95, -3.3);
+    stream.visible = false;
+    group.add(stream);
+    const t = { x: sx, on: false, stream };
+    taps.push(t);
+    usable(interactables, sx, 1.6, -1.9, "turn the tap on", 0.45, {
+      tag: `tap${i}`, sustain: 1.2, hw: 1.4, hh: 1.9,
+      onUse: () => { t.on = !t.on; stream.visible = t.on; },
+    });
+  }
+
   // A rubber duck on its side in black water
   const duck = new THREE.Mesh(
     new THREE.SphereGeometry(0.13, 10, 8),
@@ -377,7 +407,21 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
       waypoints: [15, 27, 41, 55, 70, 78], dwellSeconds: 3.2, startIndex: 2,
       safeBelow: 12.5, safeAbove: 81,
     },
-    update(dt) {
+    update(dt, ctx) {
+      // A running tap is a standing invitation. She will go to the nearest
+      // one and stay near it, which is the whole point of turning it on.
+      const running = taps.filter((t) => t.on);
+      if (running.length) {
+        this.noise = Math.max(this.noise ?? 0, 0.5);
+        const nearest = running.reduce((a, b) =>
+          Math.abs(b.x - ctx.theoX) < Math.abs(a.x - ctx.theoX) ? b : a
+        );
+        this.lure = nearest.x;
+        for (const t of running) t.stream.scale.y = 1 + Math.sin(performance.now() * 0.02) * 0.06;
+      } else {
+        this.lure = undefined;
+      }
+
       if (draining > 0) {
         draining -= dt;
         // the bath empties, and every pipe in the floor screams about it

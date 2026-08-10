@@ -15,8 +15,19 @@ const CATCH_RANGE = 0.8;
 const CONE_ANGLE = 0.62;
 const CONE_RANGE = 15.5;
 
-const SUSPICION_RISE = 1.55;
-const SUSPICION_FALL = 0.5;
+const SUSPICION_RISE = 1.7;
+// Slower than it rises — once it has an idea where you are, it keeps it.
+const SUSPICION_FALL = 0.36;
+const SEARCH_SECONDS = 6.0;
+const LOST_GRACE = 1.0;
+
+/**
+ * The house gets worse as it gets deeper. Floor 7 is the tutorial; by the
+ * corridors the wardens notice faster and run you down harder.
+ */
+function depthScale(floor: number): number {
+  return 1 + (7 - floor) * 0.075; // 1.00 on seven → 1.30 on two
+}
 
 /** How each sense behaves. Tuned so every floor plays differently. */
 const SENSE: Record<
@@ -381,7 +392,9 @@ export class Entity {
       }
 
       case "echo": {
-        // Only the ping sees. Standing still is no defence — soft cover is.
+        // A loud clatter does not need a ping to be heard.
+        if ((floor.noise ?? 0) > 0.45) return floor.noise!;
+        // Otherwise only the ping sees. Stillness is no defence — cover is.
         if (this.pingT > 0.35) return 0;
         if (this.pingRadius < dist - 1.2 || this.pingRadius > dist + 3.5) return 0;
         if (this.inZone("soft", theo.position.x, theo.position.y, floor)) return 0;
@@ -391,7 +404,11 @@ export class Entity {
       }
 
       case "vibration": {
-        // It reads the floorboards. Get off them and you do not exist.
+        // Anything heavy hitting the boards travels straight to it, even if
+        // you are up off the floor when it lands.
+        if ((floor.noise ?? 0) > 0.6) return floor.noise!;
+        // Otherwise it reads footfall alone. Get off the boards and you do
+        // not exist to it.
         if (theo.position.y > 0.35) return 0;
         if (this.inZone("quiet", theo.position.x, theo.position.y, floor)) return 0;
         const step =
@@ -460,13 +477,23 @@ export class Entity {
     if (level > 0) {
       this.suspicion = Math.min(
         1,
-        this.suspicion + dt * SUSPICION_RISE * s.rise * level
+        this.suspicion + dt * SUSPICION_RISE * s.rise * level * depthScale(floor.floor)
       );
       this.lastSeenX = theo.position.x;
-      this.lostGraceT = 0.7;
+      this.lostGraceT = LOST_GRACE;
     } else {
       this.lostGraceT = Math.max(0, this.lostGraceT - dt);
       this.suspicion = Math.max(0, this.suspicion - dt * SUSPICION_FALL);
+    }
+
+    // A standing lure — a tap left running, a record still turning — holds it
+    // there while it lasts, provided it has not actually got hold of you.
+    if (floor.lure !== undefined && this.state !== "hunt" && this.state !== "seize") {
+      this.lastSeenX = floor.lure;
+      if (this.state === "patrol") {
+        this.state = "search";
+        this.searchT = 1.5; // refreshed every frame the lure keeps running
+      }
     }
 
     // A thrown object always wins its attention over you
@@ -494,7 +521,9 @@ export class Entity {
       case "hunt": {
         const dx = theo.position.x - this.root.position.x;
         this.faceToward(theo.position.x);
-        this.vx = THREE.MathUtils.damp(this.vx, Math.sign(dx) * s.huntSpeed, 5, dt);
+        this.vx = THREE.MathUtils.damp(
+          this.vx, Math.sign(dx) * s.huntSpeed * depthScale(floor.floor), 5, dt
+        );
         if (
           Math.abs(dx) < CATCH_RANGE &&
           Math.abs(theo.position.y - this.root.position.y) < 1.8 &&
@@ -505,7 +534,7 @@ export class Entity {
           this.vx = 0;
         } else if (level <= 0 && this.lostGraceT <= 0) {
           this.state = "search";
-          this.searchT = 4.5;
+          this.searchT = SEARCH_SECONDS;
         }
         break;
       }

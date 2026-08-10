@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
-  FloorBuild, journalPage, makeKey, shell, solid, stairwellDoor, writing, Zone,
+  FloorBuild, journalPage, makeKey, shell, solid, stairwellDoor, usable, writing, Zone,
 } from "../build";
 
 // FLOOR 2 — THE MIRROR FLOOR. Cold silvers over rot. The thing here wears
@@ -165,6 +165,20 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
     solid(group, null, 0.02, 0.18, 0.02, 37.4 + i * 0.5, 5.12, -2.4, 0x53565e);
   }
   cloth(group, 41.8, 3.4, 1.1, 2.6, 0x4a4c56, -2.2, 0.05);
+
+  // Noise means nothing to the thing in the glass. What matters here is
+  // whether you are visible in it — so handling the room is nearly free,
+  // and the game quietly teaches you that by letting you get away with it.
+  usable(interactables, 32.6, 1.4, -2.2, "open the dressing table drawers", 0.3, { hw: 1.4 });
+  usable(interactables, 33.4, 1.6, -2.4, "pick up the hairbrush", 0.2, { hw: 0.8 });
+  usable(interactables, 37.2, 1.6, -1.8, "push the coat hangers along the rail", 0.35, {
+    tag: "hangers", sustain: 2.2, hw: 1.6,
+  });
+  usable(interactables, 21.4, 1.6, -1.0, "set the chandelier swinging", 0.4, {
+    tag: "chandelier", sustain: 3.5, hw: 1.4,
+  });
+  usable(interactables, 51, 1.6, -2.6, "straighten a portrait", 0.25, { hw: 2.0 });
+  usable(interactables, 10.3, 1.0, -0.4, "take a dust sheet", 0.15, { hw: 0.9 });
 
   const dl = new THREE.PointLight(0x4c5670, 90, 20, 1.6);
   dl.position.set(37, 7, 2.6);

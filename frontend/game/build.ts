@@ -4,6 +4,9 @@ import * as THREE from "three";
 // 2.5D strip of rooms; only the palette, the furniture and the sense that
 // hunts you change as you go down.
 
+// "use" is the verb that makes the house feel touchable: taps, drawers,
+// chairs, pot stacks, a gramophone. Everything you handle makes a noise, and
+// most of what lives here hunts by noise — so being curious costs you.
 export type InteractableType =
   | "hide"
   | "climb"
@@ -12,6 +15,7 @@ export type InteractableType =
   | "lever" // valves, switches, things that change the room
   | "cover" // mirrors to drape, scent to mask — one-shot state changes
   | "read" // Wren's journal
+  | "use" // touch the world: it answers, and it is heard
   | "door"; // the stairwell down
 
 export interface Interactable {
@@ -31,6 +35,12 @@ export interface Interactable {
   tag?: string;
   /** Set by floors to run their own logic when used. */
   onUse?: (build: FloorBuild) => void;
+  /** 0..1 — how loud handling this is. Most wardens can hear it. */
+  noise?: number;
+  /** Seconds the noise keeps drawing attention. Taps and gramophones run on. */
+  sustain?: number;
+  /** A "use" object can be handled more than once. */
+  repeatable?: boolean;
 }
 
 /** Which sense the floor's warden hunts by. */
@@ -84,6 +94,12 @@ export interface FloorBuild {
   update?: (dt: number, ctx: FloorContext) => void;
   /** Extra noise the floor's sense should consider this frame (0..1). */
   noise?: number;
+  /**
+   * A place the warden should be drawn to for as long as it lasts — a tap
+   * left running, a record still playing. Unlike a thrown object this does
+   * not expire on its own; the floor keeps setting it.
+   */
+  lure?: number;
 }
 
 export interface FloorContext {
@@ -472,6 +488,39 @@ export function stairwellDoor(
   });
 
   return { panel, plate };
+}
+
+/**
+ * Make something touchable. `noise` is the whole point: 0.2 is a drawer
+ * sliding, 0.6 is a chair scraping, 1.0 is a stack of pans going over. Give
+ * it `sustain` and it keeps calling attention to itself after you walk away —
+ * which turns a running tap into a decoy you can plan around.
+ */
+export function usable(
+  interactables: Interactable[],
+  x: number, y: number, z: number,
+  label: string,
+  noise: number,
+  opts: {
+    tag?: string; sustain?: number; repeatable?: boolean;
+    onUse?: (b: FloorBuild) => void;
+    hw?: number; hh?: number; hd?: number;
+  } = {}
+) {
+  // `z` is where the object sits; the trigger has to reach the walk lane at
+  // z = 0 or he can never touch it from the floor. Centre it between the two
+  // and make it deep enough to always span both.
+  const tz = -0.5;
+  const hd = opts.hd ?? Math.max(1.8, Math.abs(z - tz) + 1.0);
+  interactables.push({
+    type: "use",
+    trigger: box(x, y, tz, opts.hw ?? 1.1, opts.hh ?? 1.2, hd),
+    label, noise,
+    sustain: opts.sustain,
+    repeatable: opts.repeatable ?? true,
+    tag: opts.tag,
+    onUse: opts.onUse,
+  });
 }
 
 // ── Props ──

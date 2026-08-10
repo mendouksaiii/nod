@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   bookPile, bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider,
   fills, FloorBuild, H, journalPage, makeKey, picture, shell, solid,
-  stairwellDoor, writing,
+  stairwellDoor, usable, writing,
 } from "../build";
 
 // FLOOR 7 — THE NURSERY. Where he wakes. The teaching floor: it hunts by
@@ -107,6 +107,16 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   lamp.position.set(6.0, 0.95, -2.6);
   lamp.castShadow = true;
   group.add(lamp);
+
+  // Things in the waking room answer when you touch them. Quietly — this is
+  // the floor that teaches you the rules, not the one that punishes you.
+  usable(interactables, 6.0, 1.0, -2.6, "switch the lamp off", 0.15, {
+    tag: "lamp", hw: 0.9,
+    onUse: () => { lamp.visible = !lamp.visible; shade.visible = lamp.visible; },
+  });
+  usable(interactables, BEDX + 1.35, 1.0, BEDZ, "pull the covers back", 0.2, { hw: 0.8 });
+  usable(interactables, 7.0, 0.9, -2.6, "move the chair", 0.45, { hw: 0.8 });
+  usable(interactables, 1.6, 1.6, -3.4, "touch the window", 0.1, { hw: 1.1, hh: 2.0 });
 
   // A glass of water nobody drank
   const glass = new THREE.Mesh(
@@ -309,6 +319,17 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   horse.traverse((m) => { m.castShadow = true; });
   group.add(horse);
   colliders.push(box(55, 1.4, -2.2, 1.3, 1.4, 0.6));
+  // The rocking horse is the first genuinely bad idea the house offers you:
+  // it is loud, it keeps rocking, and it is right in the warden's territory.
+  const rock = { t: 0 };
+  usable(interactables, 55, 1.2, -1.0, "push the rocking horse", 0.8, {
+    tag: "horse", sustain: 4.5, hw: 1.6,
+    onUse: () => { rock.t = 3.6; },
+  });
+
+  // Toy chest lid, dresser drawers, blocks — all of them make a sound
+  usable(interactables, 52.1, 1.0, -0.6, "lift the toy chest lid", 0.5, { hw: 0.9 });
+  usable(interactables, 43.5, 0.9, 0.8, "kick the ball", 0.65, { hw: 0.9, sustain: 2.0 });
 
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(0.5, 14, 12),
@@ -532,6 +553,14 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
     update(dt) {
       // Nobody has wound it in a long time and it has not stopped
       mobileHub.rotation.y += dt * 0.12;
+      // A pushed rocking horse keeps rocking, and keeps being heard, and
+      // slowly gives up — which is a window you can either use or waste.
+      if (rock.t > 0) {
+        rock.t = Math.max(0, rock.t - dt);
+        const amp = rock.t / 3.6;
+        horse.rotation.z = Math.sin(performance.now() * 0.006) * 0.16 * amp;
+        this.noise = Math.max(this.noise ?? 0, 0.55 * amp);
+      }
     },
   };
 }

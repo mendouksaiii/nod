@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   bookPile, bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider,
   fills, FloorBuild, journalPage, makeKey, picture, shell, solid,
-  stairwellDoor, writing, Zone,
+  stairwellDoor, usable, writing, Zone,
 } from "../build";
 
 // FLOOR 4 — THE STUDY. Wet greens, and a thing with no face that pings the
@@ -68,7 +68,7 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
     }
   }
   interactables.push({
-    type: "hide", trigger: box(20, 1, -0.6, 7, 1, 1.2), label: "press into the books",
+    type: "hide", trigger: box(20, 1, -0.6, 2.5, 1, 1.2), label: "press into the books",
     hidePoint: new THREE.Vector3(20, 0, -1.9), hidePose: "stand",
   });
   // A library ladder on its rail, books pulled out and abandoned mid-search,
@@ -257,6 +257,21 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
   cobweb(group, 85.6, 8.0, 1.5);
   debris(group, 78, 8, 7, 0x2f2d22, -0.7);
 
+  // ── The gramophone ──
+  // The counterpart to floor six's taps: wind it and it plays on without you,
+  // and the thing that hears in circles will go and stand over it.
+  const playing = { t: 0 };
+  usable(interactables, 76.5, 1.6, -1.2, "wind the gramophone", 0.85, {
+    tag: "gramophone", sustain: 2.0, hw: 2.0, hh: 1.8,
+    onUse: () => { playing.t = 14; },
+  });
+  
+  usable(interactables, 26.6, 1.4, -1.6, "spin the globe", 0.3, { hw: 0.9, sustain: 1.5 });
+  usable(interactables, 20, 2.0, -1.4, "pull a book off the stack", 0.5, {
+    tag: "book", sustain: 1.0, hw: 2.2, hh: 2.2,
+  });
+  usable(interactables, 41.6, 1.2, -1.6, "pick up the cold cup", 0.2, { hw: 0.9 });
+
   const rl2 = new THREE.PointLight(0x50663f, 85, 20, 1.6);
   rl2.position.set(78, 6.5, 2.6);
   group.add(rl2);
@@ -312,6 +327,15 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
       safeBelow: 12.5, safeAbove: 85,
     },
     update(dt) {
+      // A wound gramophone plays itself out, and holds the whisperer over it
+      if (playing.t > 0) {
+        playing.t = Math.max(0, playing.t - dt);
+        horn.rotation.y += dt * 0.4;
+        this.noise = Math.max(this.noise ?? 0, 0.6);
+        this.lure = 76.5;
+      } else {
+        this.lure = undefined;
+      }
       if (this.noise! > 0) this.noise = Math.max(0, this.noise! - dt * 0.8);
     },
   };

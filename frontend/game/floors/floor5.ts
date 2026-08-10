@@ -2,7 +2,7 @@ import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
   FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
-  writing, Zone,
+  usable, writing, Zone,
 } from "../build";
 
 // FLOOR 5 — THE PANTRY. Jaundiced yellows, everything sticky. The feeder
@@ -121,7 +121,7 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
   interactables.push(
     { type: "climb", trigger: box(49.2, 1.0, -0.6, 0.7, 1.0, 1.2), label: "climb the table",
       climbTopY: 1.6, climbXMin: 49.8, climbXMax: 56.2, climbZ: -2.0 },
-    { type: "hide", trigger: box(53, 0.6, 0.2, 3.2, 0.6, 1.2), label: "hide under the table",
+    { type: "hide", trigger: box(53, 0.6, 0.2, 2.0, 0.6, 1.2), label: "hide under the table",
       hidePoint: new THREE.Vector3(53, 0, -2.0), hidePose: "crawl" }
   );
 
@@ -175,6 +175,23 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
   }
   bottles(group, 49.6, 1.62, -1.2, 4, [0x6b5a2e, 0x4b5230, 0x5a3a26], 1.1);
   picture(group, 61.0, 4.6, 0.85, 1.05);
+
+  // The kitchen is where curiosity is most expensive: everything in it is
+  // metal, stacked, and one nudge from going over.
+  usable(interactables, 58.5, 1.6, -2.2, "knock the pans over", 1.0, {
+    tag: "pans", sustain: 3.0, hw: 1.5,
+  });
+  usable(interactables, 56.0, 3.0, -2.6, "run a finger along the knives", 0.55, {
+    tag: "knives", sustain: 1.2, hw: 1.9, hh: 1.4,
+  });
+  usable(interactables, 50.2, 1.7, -1.4, "set the bowls straight", 0.3, { hw: 1.1 });
+  usable(interactables, 20, 1.4, -2.6, "swing the meat hooks", 0.6, {
+    tag: "hooks", sustain: 2.4, hw: 2.0, hh: 1.8,
+  });
+  usable(interactables, 36, 1.6, -1.5, "take a jar off the shelf", 0.7, {
+    tag: "jar", sustain: 1.5, hw: 1.8, hh: 1.6,
+  });
+  usable(interactables, 88.4, 1.5, -2.2, "tip the scales", 0.4, { hw: 1.0 });
 
   const kl = new THREE.PointLight(0x9a7a34, 95, 22, 1.5);
   kl.position.set(54, 7, 2.6);
