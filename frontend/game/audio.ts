@@ -1,5 +1,6 @@
-// The sound of the house. All of it is synthesised at runtime — there is not
-// a single audio file in this game.
+// The sound of the house. Almost all of it is synthesised at runtime; the
+// only recorded material is a small set of voice clips in /public/audio,
+// because a real child's voice is the one thing synthesis cannot fake.
 //
 // That is a deliberate choice rather than a shortcut. Horror sound stops
 // working the moment the player recognises a loop, and a procedural engine
@@ -55,6 +56,19 @@ const PROFILES: Record<number, FloorProfile> = {
   1: { decay: 3.4, toneHz: 90, toneQ: 0.6, toneGain: 0.014, droneHz: 30, droneGain: 0.034, incidental: [14, 30], kind: "ground" },
 };
 
+/**
+ * Recorded voice clips.
+ *
+ * The source file is a compilation of about nine separate takes separated by
+ * silence, so we play a single phrase out of it rather than the whole 27
+ * seconds. `offset` and `duration` are in seconds and were chosen by scanning
+ * the amplitude envelope for a complete utterance — attack through decay —
+ * around the loudest point in the file. Move them to pick a different line.
+ */
+const VOICES = {
+  behindYou: { url: "/audio/behind-you.mp3", offset: 15.6, duration: 3.1 },
+} as const;
+
 export class NodAudio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -82,6 +96,9 @@ export class NodAudio {
   private scoreFilter!: BiquadFilterNode;
   private scoreVoices: OscillatorNode[] = [];
   private scoreNoteT = 12;
+  /** Recorded voice clips, decoded once and reused. */
+  private voices = new Map<string, AudioBuffer>();
+  private voiceT = 25;
   private breathT = 0;
   private incidentalT = 6;
   private heartT = 0;
@@ -171,6 +188,54 @@ export class NodAudio {
     this.started = true;
     this.setFloor(this.floor);
     this.startScore();
+    void this.loadVoices();
+  }
+
+  /**
+   * Recorded voice clips. Fetched in the background and simply absent if they
+   * fail — a missing file must never take the rest of the sound down with it.
+   * Add more by dropping an mp3 in /public/audio and naming it here.
+   */
+  private async loadVoices() {
+    for (const [name, { url }] of Object.entries(VOICES)) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const bytes = await res.arrayBuffer();
+        this.voices.set(name, await this.ctx!.decodeAudioData(bytes));
+      } catch {
+        // A clip that will not load is not worth breaking the game over
+      }
+    }
+  }
+
+  /**
+   * Speak. Deliberately quiet and heavily reverbed so it sits in the room
+   * rather than on top of the mix — it should sound like it came from
+   * somewhere in the house, not from the game.
+   */
+  private say(name: keyof typeof VOICES, gain = 0.5, pan = 0) {
+    const buf = this.voices.get(name);
+    const clip = VOICES[name];
+    if (!buf || !this.ctx) return;
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    // Pitched a little down: children's horror voices are always slowed
+    src.playbackRate.value = 0.92;
+    const g = c.createGain();
+    g.gain.value = gain;
+    const p = c.createStereoPanner();
+    p.pan.value = pan;
+    src.connect(g); g.connect(p);
+    // Mostly into the reverb, so it reads as somewhere else in the house
+    p.connect(this.verb);
+    const dry = c.createGain();
+    dry.gain.value = 0.35;
+    p.connect(dry);
+    dry.connect(this.sfx);
+    // Play one phrase out of the clip, not the whole file
+    src.start(0, clip.offset, clip.duration);
   }
 
   /**
@@ -478,6 +543,26 @@ export class NodAudio {
     if (this.scoreNoteT <= 0) {
       this.scoreNoteT = 14 + Math.random() * 22 - s.dread * 8;
       if (!hunted && !s.hidden) this.scoreNote();
+    }
+
+    // ── The thing in the glass speaks ──
+    // Only on the mirror floor, only once it has started to notice you, and
+    // only rarely. It is panned behind and away from the warden's actual
+    // position, so the voice never tells you anything true about where it is —
+    // it just tells you to turn around.
+    if (this.profile.kind === "mirrors") {
+      this.voiceT -= dt;
+      if (this.voiceT <= 0) {
+        if (s.dread > 0.18 && !s.hidden) {
+          const behind = s.entityDx !== null && s.entityDx > 0 ? -0.75 : 0.75;
+          this.say("behindYou", 0.42, behind);
+          this.voiceT = 55 + Math.random() * 70;
+        } else {
+          // Conditions were not right — wait a few seconds and look again
+          // rather than burning the whole cooldown on a silent moment.
+          this.voiceT = 4;
+        }
+      }
     }
 
     // ── A dying torch buzzes ──
