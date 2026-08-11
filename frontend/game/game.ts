@@ -66,6 +66,7 @@ export class NodGame {
   private deathT = 0;
   private dying = false;
   private resetDone = false;
+  private floorLights: (THREE.Light & { distance: number })[] = [];
   private deathBear: THREE.Group | null = null;
   /** On-chain, being kept ends the run — you wake again as a new child. */
   private runOver = false;
@@ -93,7 +94,9 @@ export class NodGame {
     this.bridge = bridge;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Capped at 1.5: on a retina panel a ratio of 2 quadruples the fragments
+    // for a game that is deliberately dark, soft and low-contrast anyway.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -146,7 +149,11 @@ export class NodGame {
       this.scene.remove(this.floor.group);
       this.floor.group.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
+        // Cached box geometry and matte materials are reused by every floor
+        // in the house — disposing them here would blank the next one.
+        if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose();
+        const mat = m.material as THREE.Material | undefined;
+        if (mat && !mat.userData?.shared) mat.dispose();
       });
     }
     this.entity?.dispose(this.scene);
@@ -167,6 +174,18 @@ export class NodGame {
 
     this.floor = buildFloor(this.scene, n, seed);
     if (this.floor.entity) this.entity = new Entity(this.scene, this.floor.entity);
+
+    // Three.js does not cull lights: every light in the scene is evaluated by
+    // every lit fragment, whether or not it reaches the camera. The house is
+    // up to 116 units long with a light in nearly every room, so collect them
+    // once here and switch off the ones the player is nowhere near.
+    this.floorLights = [];
+    this.floor.group.traverse((o) => {
+      const l = o as THREE.PointLight;
+      if (l.isPointLight || (o as THREE.SpotLight).isSpotLight) {
+        this.floorLights.push(l as THREE.Light & { distance: number });
+      }
+    });
 
     this.hasKey = false;
     this.checkpointX = this.floor.spawnX;
@@ -577,6 +596,14 @@ export class NodGame {
 
     this.floor.update?.call(this.floor, dt, this.ctx);
     this.entity?.update(dt, this.theo, this.floor.colliders, this.floor.bounds, this.floor, this.ctx);
+    // Switch off lights the player is far past. A light contributes nothing
+    // beyond its own falloff distance, so this is free visually and takes a
+    // large bite out of the fragment shader's per-light loop.
+    const camX = this.cam.camera.position.x;
+    for (const l of this.floorLights) {
+      l.visible = Math.abs(l.position.x - camX) < (l.distance || 20) + 14;
+    }
+
     this.cam.update(dt, this.theo.position, this.theo.facing, this.floor.camClamp);
     this.updateAudio(dt);
 

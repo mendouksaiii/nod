@@ -342,7 +342,7 @@ export class Theo {
 
     this.flashlight = new THREE.SpotLight(0xffe9c2, 0, 15, 0.42, 0.55, 1.1);
     this.flashlight.castShadow = true;
-    this.flashlight.shadow.mapSize.set(1024, 1024);
+    this.flashlight.shadow.mapSize.set(512, 512);
     this.flashlight.shadow.bias = -0.002;
     scene.add(this.flashlight);
     scene.add(this.flashTarget);
@@ -694,19 +694,26 @@ export class Theo {
     const shL = -0.62 - clutch * 0.3 + sw * armSwing * 0.12;
     const elL = 1.15 + clutch * 0.35;
 
-    let shR = -sw * armSwing;
-    let elR = 0.3 + Math.max(0, -sw) * 0.35;
+    // He is holding a torch, so the right arm never simply hangs — it is out
+    // in front of him at all times, lit or not. Letting it swing at his side
+    // pointed the torch at the floor, which is what he does with it least.
+    // The torch hangs along the forearm, so the FOREARM is what has to be
+    // horizontal — not just the upper arm. Shoulder near -1.25rad with the
+    // elbow almost straight puts the barrel out in front of him; anything
+    // shallower and it quietly goes back to pointing at the floor.
+    let shR = -1.25 - sw * armSwing * 0.14;
+    let elR = 0.12 + Math.max(0, -sw) * 0.08;
     if (carrying) {
       shR = -0.9 - sw * 0.05;
       elR = 1.0;
     } else if (holdingUp) {
-      // Arm nearly straight out in front, the way a child holds a torch it
-      // does not quite trust — the pose the concept art is built around.
-      shR = -1.34 - sw * 0.04;
-      elR = 0.22;
+      // Lit: the arm straightens further and pushes the beam ahead
+      shR = -1.45 - sw * 0.04;
+      elR = 0.05;
     } else if (sneaking) {
-      shR = 0.12 - sw * armSwing * 0.5;
-      elR = 0.75;
+      // Crouched and tucked in, but still aimed where he is going
+      shR = -1.05 - sw * armSwing * 0.12;
+      elR = 0.22;
     }
 
     const armDamp = 9;

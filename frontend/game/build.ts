@@ -116,6 +116,36 @@ export interface FloorContext {
 export const D = 9; // strip depth — the walk lane sits at z = 0
 export const H = 13; // ceiling height a child can barely see
 
+// ── Shared geometry and materials ─────────────────────────────────
+// Every solid() used to mint its own BoxGeometry and MeshStandardMaterial,
+// which meant ~190 unique materials for ~280 meshes on a single floor and
+// almost no batching. Boxes of the same size and blocks of the same colour
+// are indistinguishable, so they are cached and reused across the house.
+// Anything flagged `shared` must never be disposed with a floor.
+const geoCache = new Map<string, THREE.BoxGeometry>();
+const matCache = new Map<number, THREE.MeshStandardMaterial>();
+
+function sharedBox(w: number, h: number, d: number): THREE.BoxGeometry {
+  const key = `${w.toFixed(3)}:${h.toFixed(3)}:${d.toFixed(3)}`;
+  let g = geoCache.get(key);
+  if (!g) {
+    g = new THREE.BoxGeometry(w, h, d);
+    g.userData.shared = true;
+    geoCache.set(key, g);
+  }
+  return g;
+}
+
+function sharedMatte(color: number): THREE.MeshStandardMaterial {
+  let m = matCache.get(color);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color, roughness: 1 });
+    m.userData.shared = true;
+    matCache.set(color, m);
+  }
+  return m;
+}
+
 export function solid(
   group: THREE.Group,
   colliders: THREE.Box3[] | null,
@@ -127,10 +157,7 @@ export function solid(
   z: number,
   color: number
 ): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color, roughness: 1 })
-  );
+  const mesh = new THREE.Mesh(sharedBox(w, h, d), sharedMatte(color));
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -539,7 +566,8 @@ export function cloth(
   );
   m.position.set(x, y, z);
   m.rotation.z = tilt;
-  m.castShadow = true;
+  // Deliberately not a shadow caster. Hanging cloth is dressing, and every
+  // caster is re-rendered into each shadow map every single frame.
   group.add(m);
   return m;
 }
@@ -573,7 +601,6 @@ export function bottles(
       })
     );
     b.position.set(x + i * 0.15 * scale, y + h / 2, z);
-    b.castShadow = true;
     group.add(b);
   }
 }
@@ -594,7 +621,6 @@ export function debris(
       z + (((i * 31) % 100) / 100 - 0.5) * 1.6
     );
     d.rotation.y = i * 0.7;
-    d.castShadow = true;
     group.add(d);
   }
 }

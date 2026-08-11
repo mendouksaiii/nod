@@ -107,7 +107,8 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   // room stay dark, not flood the whole floor amber.
   const lamp = new THREE.PointLight(0xd8a355, 46, 8.5, 1.9);
   lamp.position.set(6.0, 0.95, -2.6);
-  lamp.castShadow = true;
+  // Not a shadow caster: it is a small warm pool, and every shadow-casting
+  // light costs a full depth pass over the whole floor every frame.
   group.add(lamp);
 
   // Things in the waking room answer when you touch them. Quietly — this is
@@ -278,7 +279,8 @@ export function buildFloor7(scene: THREE.Scene, seed: number): FloorBuild {
   moon.position.set(45.5, 12, 3.5);
   moon.target.position.set(45.5, 0, -1);
   moon.castShadow = true;
-  moon.shadow.mapSize.set(2048, 2048);
+  // 1024 is indistinguishable at this camera distance and a quarter the texels
+  moon.shadow.mapSize.set(1024, 1024);
   moon.shadow.bias = -0.001;
   group.add(moon, moon.target);
 

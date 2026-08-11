@@ -248,7 +248,7 @@ export class Entity {
     );
     this.gaze.castShadow = s.showsCone;
     if (s.showsCone) {
-      this.gaze.shadow.mapSize.set(1024, 1024);
+      this.gaze.shadow.mapSize.set(512, 512);
       this.gaze.shadow.bias = -0.002;
     }
     this.gaze.target = this.gazeTarget;

@@ -38,9 +38,12 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
   shell(group, colliders, W, FLOOR, WALL);
   for (const dx of [11, 26, 41, 56, 71, 86, 101]) divider(group, colliders, dx, DARK, 2.6);
 
-  // Floorboards you can read — the thing beneath follows their grain
+  // Floorboards you can read — the thing beneath follows their grain.
+  // They lie flat on the ground, so they cast nothing worth 58 extra meshes
+  // in every shadow map.
   for (let i = 0; i < 58; i++) {
-    solid(group, null, 1.9, 0.03, D - 0.4, 1 + i * 2, 0.015, 0, i % 2 ? 0x201613 : 0x241a15);
+    const plank = solid(group, null, 1.9, 0.03, D - 0.4, 1 + i * 2, 0.015, 0, i % 2 ? 0x201613 : 0x241a15);
+    plank.castShadow = false;
   }
 
   // ── Landing (0–11) ──
