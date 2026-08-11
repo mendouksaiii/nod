@@ -44,9 +44,11 @@ export default function Title() {
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const fadeRef = useRef<((to: number, seconds: number, thenPause?: boolean) => void) | null>(null);
   const handOverRef = useRef<(() => void) | null>(null);
+  /** Guards against beginRun being entered twice as wagmi's values land. */
+  const startedRef = useRef(false);
 
   const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { connect, connectors, error: connectError } = useConnect();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const publicClient = usePublicClient();
@@ -141,6 +143,7 @@ export default function Title() {
   }, [phase, startWith]);
 
   async function wake() {
+    startedRef.current = false; // so TRY AGAIN genuinely tries again
     setPhase("connecting");
     setMessage("");
     try {
@@ -158,13 +161,38 @@ export default function Title() {
     }
   }
 
-  // Once the wallet is connected, carry on into the house
+  /**
+   * Carry on into the house once wagmi has everything.
+   *
+   * `address` MUST be in these dependencies. It arrives on a different tick
+   * from `walletClient`, and beginRun needs all three — without it the effect
+   * fired once while address was still undefined, beginRun returned, and
+   * nothing ever re-ran it. That is the "connected but stuck on verifying"
+   * hang: no error, no retry, forever.
+   */
   useEffect(() => {
-    if (phase === "connecting" && isConnected && walletClient && publicClient) {
-      void beginRun();
-    }
+    if (phase !== "connecting") return;
+    if (!isConnected || !walletClient || !publicClient || !address) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void beginRun();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isConnected, walletClient, publicClient]);
+  }, [phase, isConnected, walletClient, publicClient, address]);
+
+  // A rejected or ignored wallet prompt must not hang the screen either.
+  useEffect(() => {
+    if (phase !== "connecting") return;
+    const bail = setTimeout(() => {
+      if (!startedRef.current) {
+        setPhase("error");
+        setMessage(
+          connectError?.message ??
+            "the wallet never answered. check it is unlocked and on base sepolia, or go in without being remembered."
+        );
+      }
+    }, 25000);
+    return () => clearTimeout(bail);
+  }, [phase, connectError]);
 
   /**
    * Play with no chain at all. The house still works — it just does not
@@ -178,7 +206,15 @@ export default function Title() {
   }
 
   async function beginRun() {
-    if (!walletClient || !publicClient || !address) return;
+    // Never return silently from here — the caller has already put the screen
+    // into a waiting state, so bailing without saying why is what left it
+    // hanging on "verifying" in the first place.
+    if (!walletClient || !publicClient || !address) {
+      startedRef.current = false;
+      setPhase("error");
+      setMessage("the wallet connected but never handed over an account.");
+      return;
+    }
     setPhase("waking");
     try {
       if (chainId !== activeChain.id) {
@@ -203,6 +239,7 @@ export default function Title() {
       setStartWith({ link });
       setPhase("playing");
     } catch (err: unknown) {
+      startedRef.current = false;
       setPhase("error");
       const raw = err instanceof Error ? err.message : String(err);
       setMessage(raw.length > 160 ? raw.slice(0, 160) + "…" : raw);
