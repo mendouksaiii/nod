@@ -41,6 +41,9 @@ export default function Title() {
   const gameRef = useRef<{ dispose: () => void } | null>(null);
   /** Set when a run is ready to start; `link: null` means play without the chain. */
   const [startWith, setStartWith] = useState<{ link: HouseLink | null } | null>(null);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
+  const fadeRef = useRef<((to: number, seconds: number, thenPause?: boolean) => void) | null>(null);
+  const handOverRef = useRef<(() => void) | null>(null);
 
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
@@ -51,6 +54,74 @@ export default function Title() {
 
   // Tear the game down if this component ever unmounts
   useEffect(() => () => gameRef.current?.dispose(), []);
+
+  /**
+   * The music box on the title screen.
+   *
+   * Browsers refuse to autoplay audio until the visitor has interacted with
+   * the page, so we try immediately and then retry on the first gesture of
+   * any kind. It fades in rather than snapping on, and fades out when the run
+   * begins — from that point the in-game engine owns the sound.
+   */
+  useEffect(() => {
+    const el = new Audio("/audio/title-box.mp3");
+    el.loop = true;
+    el.volume = 0;
+    musicRef.current = el;
+    // A bare Audio() is invisible to the DOM, which makes sound impossible to
+    // verify from the console. Expose it outside production builds only.
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __titleMusic?: HTMLAudioElement }).__titleMusic = el;
+    }
+
+    let raf = 0;
+    const fade = (to: number, seconds: number, thenPause = false) => {
+      cancelAnimationFrame(raf);
+      const from = el.volume;
+      const t0 = performance.now();
+      const step = () => {
+        const k = Math.min(1, (performance.now() - t0) / (seconds * 1000));
+        el.volume = from + (to - from) * k;
+        if (k < 1) raf = requestAnimationFrame(step);
+        else if (thenPause) el.pause();
+      };
+      raf = requestAnimationFrame(step);
+    };
+    fadeRef.current = fade;
+
+    // Clicking WAKE UP is itself a pointerdown, so without this guard the
+    // gesture handler restarts the fade-in and cancels the hand-over — the
+    // box would keep playing straight over the game.
+    let handedOver = false;
+    const start = () => {
+      if (handedOver) return;
+      el.play().then(() => { if (!handedOver) fade(0.5, 4); }).catch(() => {
+        /* still blocked — the next gesture will try again */
+      });
+    };
+    start();
+    window.addEventListener("pointerdown", start);
+    window.addEventListener("keydown", start);
+
+    handOverRef.current = () => {
+      handedOver = true;
+      window.removeEventListener("pointerdown", start);
+      window.removeEventListener("keydown", start);
+      fade(0, 2.2, true);
+    };
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointerdown", start);
+      window.removeEventListener("keydown", start);
+      el.pause();
+    };
+  }, []);
+
+  // Hand the sound over to the game when the run starts
+  useEffect(() => {
+    if (phase === "playing") handOverRef.current?.();
+  }, [phase]);
 
   /**
    * Build the game once the host div is actually on screen. This has to be an
