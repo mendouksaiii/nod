@@ -725,9 +725,18 @@ export class NodAudio {
 
   /** It has you. */
   caught() {
+    // A gasp cut off part-way through — the breath that does not finish
+    this.burst({ dur: 0.16, gain: 0.2, hz: 900, hzEnd: 640, q: 1.4, attack: 0.01 });
     this.tone({ hz: 440, hzEnd: 40, dur: 1.4, gain: 0.16, type: "sawtooth", attack: 0.002 });
     this.tone({ hz: 293, hzEnd: 35, dur: 1.6, gain: 0.12, type: "square", attack: 0.002 });
     this.burst({ dur: 1.2, gain: 0.1, hz: 2000, hzEnd: 120, q: 0.6 });
+    // Then everything stops. The silence after is the loudest part of the
+    // whole game, so nothing is allowed to fill it.
+    const t = this.now();
+    this.droneGain.gain.setTargetAtTime(0, t + 0.5, 0.15);
+    this.toneGain.gain.setTargetAtTime(0, t + 0.5, 0.15);
+    this.scoreGain.gain.setTargetAtTime(0, t + 0.35, 0.1);
+    this.presenceGain.gain.setTargetAtTime(0, t + 0.6, 0.2);
   }
 
   keyTaken() {

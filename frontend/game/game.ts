@@ -65,6 +65,8 @@ export class NodGame {
   private checkpointX = 2.8;
   private deathT = 0;
   private dying = false;
+  private resetDone = false;
+  private deathBear: THREE.Group | null = null;
   /** On-chain, being kept ends the run — you wake again as a new child. */
   private runOver = false;
   private transition: "none" | "descending" | "settled" | "escaped" = "none";
@@ -692,6 +694,12 @@ export class NodGame {
     if (this.entity) this.entity.caught = false;
     this.input.frozen = true;
     this.hud.prompt.style.opacity = "0";
+    this.cam.shake(0.4);
+
+    // The bear comes out of his arm as he is lifted, and stays on the boards
+    // of the room where it happened.
+    const where = this.theo.dropBear();
+    if (where) this.dropBearInWorld(where);
 
     // Without a wallet this is just a retry. With one, the house keeps the
     // child you were, and the next player will walk past your shoes.
@@ -706,9 +714,46 @@ export class NodGame {
     }
   }
 
+  /**
+   * A bear on the floor of the room where a child was taken. It outlives the
+   * run — the camera holds on it for a moment after he is gone, and that
+   * beat does more than any amount of blood would.
+   */
+  private dropBearInWorld(at: THREE.Vector3) {
+    const fur = new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 1 });
+    const furDark = new THREE.MeshStandardMaterial({ color: 0x6b5943, roughness: 1 });
+    const b = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.065, 4, 8), fur);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), fur);
+    head.position.y = 0.115;
+    const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.033, 8, 6), furDark);
+    muzzle.position.set(0.053, 0.096, 0);
+    b.add(body, head, muzzle);
+    for (const z of [0.045, -0.045]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), furDark);
+      ear.position.set(-0.006, 0.162, z);
+      b.add(ear);
+    }
+    b.traverse((m) => { m.castShadow = true; });
+    // Lying on its side where it fell, in the walk lane so it is unmissable
+    b.position.set(at.x, 0.09, 0);
+    b.rotation.set(0.2, Math.random() * 3, 1.45);
+    this.floor.group.add(b);
+    this.deathBear = b;
+  }
+
   private updateDeath(dt: number) {
     this.deathT += dt;
-    if (this.deathT > 0.5) this.hud.blackout.style.opacity = "1";
+
+    // Hold on him being carried off before anything cuts. The horror is the
+    // waiting, not the impact. Stops once the house has been rebuilt, or the
+    // new child would be hanging in the air on the seventh floor.
+    if (!this.resetDone) this.theo.seize(dt, this.deathT);
+    if (this.deathBear && this.deathT < 0.9) {
+      // the bear falls, and it falls faster than he is rising
+      this.deathBear.position.y = Math.max(0.09, 0.6 - this.deathT * this.deathT * 6);
+    }
+    if (this.deathT > 0.9) this.hud.blackout.style.opacity = "1";
 
     if (this.runOver) {
       if (this.deathT > 1.2) {
@@ -723,15 +768,27 @@ export class NodGame {
       return;
     }
 
-    if (this.deathT > 1.5 && this.theo.position.x !== this.checkpointX) {
-      this.theo.respawn(this.checkpointX);
-      const e = this.floor.entity;
-      this.entity?.reset(this.checkpointX < (e?.safeAbove ?? 99) / 2 ? 3 : 0);
+    // Being caught ends the run. There is no checkpoint anywhere in this
+    // house — you go back to the bed you woke in, on the seventh floor,
+    // with everything you were carrying gone. The descent has to cost
+    // something or none of the floors below it mean anything.
+    if (this.deathT > 2.0 && !this.resetDone) {
+      this.resetDone = true;
+      this.hud.card.textContent = "";
+      // The old floor's group is disposed with it, bear included
+      this.deathBear = null;
+      this.loadFloor(TOP_FLOOR);
+      this.showCard(
+        "you woke up again",
+        "on the seventh floor, in the bed you started in.\nthe house does not mind waiting.",
+        2600
+      );
     }
-    if (this.deathT > 2.4) {
+    if (this.deathT > 3.4) {
       this.hud.blackout.style.opacity = "0";
       this.hud.vignette.style.opacity = "0";
       this.dying = false;
+      this.resetDone = false;
       this.input.frozen = false;
     }
   }

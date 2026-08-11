@@ -805,6 +805,53 @@ export class Theo {
     );
   }
 
+  /**
+   * Being taken. It lifts him off the floor by the back of the hoodie and his
+   * legs keep going, because he does not understand yet that it is over.
+   *
+   * There is no gore in this and there should never be. The thing that hurts
+   * is that the bear comes out of his arm on the way up and lands on the
+   * boards, and the camera stays on it after he is gone.
+   */
+  seize(dt: number, t: number) {
+    this.state = "stagger";
+    this.staggerT = 1;
+    this.vx = 0;
+    this.vy = 0;
+
+    // Hauled upward, feet leaving the ground
+    const lift = Math.min(1, t / 0.55);
+    this.root.position.y = lift * 0.95;
+    // Wrenched round to face whatever has him
+    this.root.rotation.y = THREE.MathUtils.damp(this.root.rotation.y, this.facing > 0 ? 1.9 : -1.9, 6, dt);
+
+    // Legs still running in the air. This is the part people flinch at.
+    const kick = Math.max(0, 1 - t * 0.8);
+    this.hipL.rotation.x = Math.sin(t * 22) * 0.9 * kick;
+    this.hipR.rotation.x = -Math.sin(t * 22) * 0.9 * kick;
+    this.kneeL.rotation.x = 0.5 + Math.max(0, Math.sin(t * 22)) * 0.8 * kick;
+    this.kneeR.rotation.x = 0.5 + Math.max(0, -Math.sin(t * 22)) * 0.8 * kick;
+
+    // The free arm reaches back for the floor
+    this.shoulderR.rotation.x = THREE.MathUtils.damp(this.shoulderR.rotation.x, 1.5, 7, dt);
+    this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, 0.2, 7, dt);
+    // The other arm loses its grip
+    this.shoulderL.rotation.x = THREE.MathUtils.damp(this.shoulderL.rotation.x, 0.9, 4, dt);
+    this.elbowL.rotation.x = THREE.MathUtils.damp(this.elbowL.rotation.x, 0.3, 4, dt);
+    this.hipRoot.rotation.x = THREE.MathUtils.damp(this.hipRoot.rotation.x, -0.5, 5, dt);
+    this.neck.rotation.x = THREE.MathUtils.damp(this.neck.rotation.x, -0.35, 5, dt);
+  }
+
+  /** The bear falls. Returns where it landed so the floor can keep it. */
+  dropBear(): THREE.Vector3 | null {
+    if (!this.hasBear) return null;
+    const world = new THREE.Vector3();
+    this.bear.getWorldPosition(world);
+    this.hasBear = false;
+    this.bear.visible = false;
+    return world;
+  }
+
   /** Put him back on his feet at a threshold, mid-run state cleared. */
   respawn(x: number) {
     this.root.position.set(x, 0, 0);
