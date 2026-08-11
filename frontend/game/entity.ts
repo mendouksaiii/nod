@@ -25,6 +25,15 @@ const LOST_GRACE = 1.0;
  * The house gets worse as it gets deeper. Floor 7 is the tutorial; by the
  * corridors the wardens notice faster and run you down harder.
  */
+/**
+ * Which of them can leave the floor. The nursery thing is long-limbed enough
+ * to go up a wall; the whisperer is a spider and prefers the ceiling. The
+ * feeder is far too heavy, the listener is standing in water, and the thing
+ * under the boards has nowhere to climb to — refusing them is as much
+ * characterisation as letting the others.
+ */
+const CAN_CLIMB = new Set<SenseKind>(["sight", "echo", "reflection"]);
+
 function depthScale(floor: number): number {
   return 1 + (7 - floor) * 0.075; // 1.00 on seven → 1.30 on two
 }
@@ -88,6 +97,18 @@ export class Entity {
   private trailTick = 0;
 
   caught = false;
+  private clawSets: THREE.Group[] = [];
+  /** Hiding places it means to look inside, nearest first. */
+  private toSearch: { x: number; checked: boolean }[] = [];
+  private checkingT = 0;
+  /** Where on a wall or ceiling it currently is: 0 = floor, 1 = ceiling. */
+  private climb = 0;
+  private climbTarget = 0;
+  private idleTic = 0;
+  /** Debug: what the last hiding-place check actually saw. */
+  lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
+  /** Set the frame it drags someone out of a hiding place. */
+  found = false;
 
   constructor(scene: THREE.Scene, spec: EntitySpec) {
     this.spec = spec;
@@ -95,8 +116,35 @@ export class Entity {
     this.waypoints = spec.waypoints;
     this.wpIndex = spec.startIndex;
 
-    const pale = new THREE.MeshStandardMaterial({ color: 0x6d6a63, roughness: 1 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x24242c, roughness: 1 });
+    // Each warden is a different disease. Two shared greys made them all read
+    // as the same silhouette in different sizes; they need their own colour of
+    // wrong. `flesh` is the exposed skin, `cloth` the rotted layer over it,
+    // `wet` the detail that catches the light and turns your stomach.
+    const SKIN: Record<string, { flesh: number; cloth: number; wet: number; emis: number }> = {
+      // waxy candle-white, grave-blue rags
+      nursery: { flesh: 0xcfc4ae, cloth: 0x2b2f3c, wet: 0x8a94a6, emis: 0x2a3040 },
+      // drowned: bloated, blue-white, permanently wet
+      listener: { flesh: 0xa8bfc4, cloth: 0x27373b, wet: 0xd6ecef, emis: 0x1f4448 },
+      // raw and fed: pink-red, split skin, grease
+      feeder: { flesh: 0xb0705f, cloth: 0x3a2118, wet: 0xd9a08a, emis: 0x3a1410 },
+      // mould: grey-green, dusty, dry as paper
+      whisperer: { flesh: 0x9aa287, cloth: 0x2c3327, wet: 0xc8d0ae, emis: 0x24301e },
+      // under the boards: dark meat and rust
+      constrictor: { flesh: 0x7d4a3c, cloth: 0x2a1a16, wet: 0xa8624a, emis: 0x35120c },
+      // mercury: it is not skin at all, it is surface
+      mirror: { flesh: 0xb9c6d4, cloth: 0x3a4250, wet: 0xe8f0fa, emis: 0x46586e },
+    };
+    const S = SKIN[spec.shape];
+    const pale = new THREE.MeshStandardMaterial({
+      color: S.flesh, roughness: 0.85,
+      emissive: S.emis, emissiveIntensity: 0.25,
+    });
+    const dark = new THREE.MeshStandardMaterial({ color: S.cloth, roughness: 1 });
+    // Wet, slightly glossy — used for mouths, eyes, and things that ooze
+    const wet = new THREE.MeshStandardMaterial({
+      color: S.wet, roughness: 0.25, metalness: 0.15,
+      emissive: S.emis, emissiveIntensity: 0.5,
+    });
 
     // Proportions per shape — each is the same child bent a different way
     const P = {
@@ -130,6 +178,51 @@ export class Entity {
     skull.scale.set(0.86, 1.05, 0.9);
     skull.castShadow = true;
     this.head.add(skull);
+
+    // ── Grotesque anatomy ──
+    // Ribs pushing through the skin. Every one of these was a child that
+    // stopped eating, or stopped moving, or stopped being a shape at all.
+    if (spec.shape !== "mirror") {
+      const ribCount = spec.shape === "feeder" ? 3 : 5;
+      for (let i = 0; i < ribCount; i++) {
+        const rib = new THREE.Mesh(
+          new THREE.TorusGeometry(P.torsoR * 1.02, 0.016, 5, 10, Math.PI * 1.15),
+          pale
+        );
+        rib.rotation.y = Math.PI / 2;
+        rib.rotation.z = Math.PI * 0.42;
+        rib.position.y = P.hipY + P.torsoL * (0.35 + i * 0.19);
+        rib.castShadow = true;
+        this.root.add(rib);
+      }
+      // A spine that has come loose of the back
+      for (let i = 0; i < 6; i++) {
+        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 5), pale);
+        knuckle.position.set(-P.torsoR * 0.85, P.hipY + P.torsoL * (0.3 + i * 0.16), 0);
+        knuckle.scale.set(0.8, 1, 1.4);
+        this.root.add(knuckle);
+      }
+    }
+
+    // Long grasping fingers on every hand — the thing that reaches for you
+    this.clawSets = [];
+    for (const grp of [this.armL, this.armR]) {
+      const claws = new THREE.Group();
+      for (let f = 0; f < 4; f++) {
+        const finger = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.014, 0.16 + (f % 2) * 0.06, 3, 5),
+          pale
+        );
+        finger.position.set(0, -0.11, (f - 1.5) * 0.035);
+        finger.rotation.x = (f - 1.5) * 0.16;
+        finger.rotation.z = 0.12;
+        finger.castShadow = true;
+        claws.add(finger);
+      }
+      claws.position.y = -((P.headY - P.hipY) * 0.9) * 1.12 - 0.1;
+      grp.add(claws);
+      this.clawSets.push(claws);
+    }
 
     // One horrifying detail, chosen by what it hunts with
     if (spec.shape === "listener") {
@@ -521,6 +614,13 @@ export class Entity {
       case "hunt": {
         const dx = theo.position.x - this.root.position.x;
         this.faceToward(theo.position.x);
+        // Getting up on the furniture is not an escape from something that
+        // can follow you up the wall. It hauls itself to your height.
+        if (CAN_CLIMB.has(this.sense) && theo.position.y > 1.2) {
+          this.climbTarget = Math.min(1, theo.position.y / 6);
+        } else {
+          this.climbTarget = 0;
+        }
         this.vx = THREE.MathUtils.damp(
           this.vx, Math.sign(dx) * s.huntSpeed * depthScale(floor.floor), 5, dt
         );
@@ -541,18 +641,56 @@ export class Entity {
 
       case "search": {
         this.searchT -= dt;
-        const dx = this.lastSeenX - this.root.position.x;
-        if (Math.abs(dx) > 0.6) {
-          this.faceToward(this.lastSeenX);
+
+        // The first time it starts searching, it works out which hiding
+        // places are near where it lost you — and it intends to check them.
+        if (!this.toSearch.length) this.planSearch(floor);
+
+        const next = this.toSearch.find((h) => !h.checked);
+        const goal = next ? next.x : this.lastSeenX;
+        const dx = goal - this.root.position.x;
+
+        if (this.checkingT > 0) {
+          // Standing over a hiding place, looking into it. This is the pause
+          // that decides whether a hidden player lives.
+          this.checkingT -= dt;
+          this.vx = THREE.MathUtils.damp(this.vx, 0, 9, dt);
+          this.headSweep += dt * 3.4;
+          if (this.checkingT <= 0 && next) {
+            next.checked = true;
+            this.lastCheck = {
+              atX: next.x, theoX: theo.position.x,
+              hidden: theo.hidden, dist: Math.abs(theo.position.x - next.x),
+            };
+            // It looked in the exact place you are. Being still does not help.
+            if (theo.hidden && Math.abs(theo.position.x - next.x) < 1.6) {
+              // He is hauled out. Without this the hunt is a no-op: a hidden
+              // player is invisible to perceive(), so the very next frame it
+              // decides it has lost him again and goes back to searching.
+              theo.leaveHide();
+              this.suspicion = 1;
+              this.state = "hunt";
+              this.lastSeenX = theo.position.x;
+              this.lostGraceT = 2.5;
+              this.found = true;
+            }
+          }
+        } else if (Math.abs(dx) > 0.7) {
+          this.faceToward(goal);
           this.vx = THREE.MathUtils.damp(this.vx, Math.sign(dx) * SEARCH_SPEED, 5, dt);
+        } else if (next) {
+          // Arrived at a hiding place — stop and look in it
+          this.checkingT = 1.4;
         } else {
           this.vx = THREE.MathUtils.damp(this.vx, 0, 7, dt);
           this.headSweep += dt * 2.2;
         }
+
         if (this.suspicion >= 1) this.state = "hunt";
         else if (this.searchT <= 0) {
           this.state = "patrol";
           this.suspicion = 0;
+          this.toSearch = [];
         }
         break;
       }
@@ -575,7 +713,38 @@ export class Entity {
     );
     if (Math.abs(this.vx) > 0.05) this.facing = Math.sign(this.vx);
 
+    // Leaving the floor. It goes up the wall backwards, and it does not
+    // hurry — the slowness is most of the horror.
+    if (this.state !== "hunt" && this.state !== "seize") this.climbTarget = 0;
+    this.climb = THREE.MathUtils.damp(this.climb, this.climbTarget, 1.6, dt);
+    this.root.position.y = this.climb * 5.4;
+    // Tips over as it goes, so on the ceiling it is fully inverted
+    this.root.rotation.z = this.climb * Math.PI * 0.92 * -this.facing;
+    // Pressed against the back wall while off the floor
+    this.root.position.z = -1.4 - this.climb * 1.6;
+
     this.animate(dt, theo);
+  }
+
+  /**
+   * Work out where somebody could be hiding near the spot it lost you, and
+   * queue those places up nearest-first. This is the difference between a
+   * thing that walks a route and a thing that is looking for you.
+   */
+  private planSearch(floor: FloorBuild) {
+    this.toSearch = floor.interactables
+      .filter((i) => i.type === "hide")
+      .map((i) => {
+        const c = new THREE.Vector3();
+        i.trigger.getCenter(c);
+        return { x: c.x, checked: false };
+      })
+      .filter((h) => Math.abs(h.x - this.lastSeenX) < 13)
+      .sort(
+        (a, b) =>
+          Math.abs(a.x - this.lastSeenX) - Math.abs(b.x - this.lastSeenX)
+      )
+      .slice(0, 3);
   }
 
   private patrol(dt: number) {
@@ -619,6 +788,38 @@ export class Entity {
     this.armL.rotation.x = sw * stride * 0.55;
     this.armR.rotation.x = -sw * stride * 0.55;
 
+    // ── Idle life ──
+    // Something that only ever walks its route reads as a machine. Between
+    // waypoints each of them does the thing its own sense would make it do.
+    this.idleTic += dt;
+    const idling = this.state === "patrol" && Math.abs(this.vx) < 0.2;
+    if (idling) {
+      const tic = Math.sin(this.idleTic * 0.7);
+      switch (this.sense) {
+        case "sound":
+          // Cocks its head hard over, holding it there, listening
+          this.head.rotation.z = THREE.MathUtils.damp(this.head.rotation.z, tic > 0.6 ? 0.5 : 0, 3, dt);
+          break;
+        case "smell":
+          // Casts about low, nose down, working the air
+          this.neck.rotation.x = THREE.MathUtils.damp(this.neck.rotation.x, 0.45 + tic * 0.25, 3, dt);
+          break;
+        case "vibration":
+          // Puts a hand flat on the boards to feel through them
+          this.armL.rotation.x = THREE.MathUtils.damp(this.armL.rotation.x, tic > 0.3 ? -1.5 : -0.2, 2.5, dt);
+          break;
+        case "sight":
+          // Slow, deliberate scanning — and every so often, dead still
+          this.neck.rotation.x = THREE.MathUtils.damp(this.neck.rotation.x, tic > 0.8 ? -0.3 : 0, 2, dt);
+          break;
+        default:
+          break;
+      }
+    } else {
+      this.head.rotation.z = THREE.MathUtils.damp(this.head.rotation.z, 0, 4, dt);
+      this.neck.rotation.x = THREE.MathUtils.damp(this.neck.rotation.x, 0, 4, dt);
+    }
+
     const hunting = this.state === "hunt" || this.state === "seize";
     this.torso.rotation.x = THREE.MathUtils.damp(
       this.torso.rotation.x,
@@ -626,6 +827,13 @@ export class Entity {
       4,
       dt
     );
+    // The fingers spread when it means to take you
+    for (const claws of this.clawSets) {
+      claws.rotation.x = THREE.MathUtils.damp(
+        claws.rotation.x, hunting ? -0.55 : 0.1, 5, dt
+      );
+      claws.scale.setScalar(THREE.MathUtils.damp(claws.scale.x, hunting ? 1.25 : 1, 5, dt));
+    }
     this.armL.rotation.z = THREE.MathUtils.damp(this.armL.rotation.z, hunting ? -0.4 : -0.1, 5, dt);
     this.armR.rotation.z = THREE.MathUtils.damp(this.armR.rotation.z, hunting ? 0.4 : 0.1, 5, dt);
 
