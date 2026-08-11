@@ -77,6 +77,11 @@ export class NodAudio {
 
   private floor = 7;
   private profile = PROFILES[7];
+  // The score: a held dissonant cluster, and the timer for struck notes
+  private scoreGain!: GainNode;
+  private scoreFilter!: BiquadFilterNode;
+  private scoreVoices: OscillatorNode[] = [];
+  private scoreNoteT = 12;
   private breathT = 0;
   private incidentalT = 6;
   private heartT = 0;
@@ -149,8 +154,78 @@ export class NodAudio {
     this.presenceNoiseGain.gain.value = 0;
     this.presenceNoiseGain.connect(this.presencePan);
 
+    // ── The score ──
+    // Everything above this line is diegetic: breath, footfall, the thing in
+    // the room. None of it is music. This is the layer that scores the house.
+    // It is bowed, dissonant and almost inaudible until the house notices you.
+    this.scoreGain = c.createGain();
+    this.scoreGain.gain.value = 0;
+    this.scoreFilter = c.createBiquadFilter();
+    this.scoreFilter.type = "lowpass";
+    this.scoreFilter.frequency.value = 320;
+    this.scoreFilter.Q.value = 0.7;
+    this.scoreGain.connect(this.scoreFilter);
+    this.scoreFilter.connect(squash);
+    this.scoreFilter.connect(this.verb);
+
     this.started = true;
     this.setFloor(this.floor);
+    this.startScore();
+  }
+
+  /**
+   * A cluster of detuned strings a semitone and a tritone apart — the two
+   * most unpleasant intervals in music, held quietly under everything. The
+   * cluster does not change note; it only opens up as the dread rises, which
+   * is why it never sounds like a tune and always sounds like a warning.
+   */
+  private startScore() {
+    const c = this.ctx!;
+    const root = this.profile.droneHz * 4;
+    // root, minor 2nd, tritone, and the octave — a held chord that hurts
+    for (const [mult, detune] of [
+      [1, -4], [1, 5], [1.0595, 3], [1.4142, -6], [2, 7],
+    ] as const) {
+      const o = c.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = root * mult;
+      o.detune.value = detune;
+      const g = c.createGain();
+      // Each voice at a different weight so the cluster has a shape
+      g.gain.value = mult === 1 ? 0.5 : mult === 2 ? 0.16 : 0.3;
+      o.connect(g);
+      g.connect(this.scoreGain);
+      o.start();
+      this.scoreVoices.push(o);
+    }
+  }
+
+  /**
+   * One note, struck alone, ringing out into the room. The oldest sound in
+   * horror scoring and still the most effective — used sparingly, and never
+   * while the house is actually chasing you, because silence is scarier then.
+   */
+  private scoreNote() {
+    const c = this.ctx!;
+    const t = this.now();
+    // A high, brittle partial from the same dissonant set
+    const root = this.profile.droneHz * 8;
+    const hz = root * [1, 1.0595, 1.4142, 1.5874][Math.floor(Math.random() * 4)];
+    const o = c.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = hz;
+    const g = c.createGain();
+    // struck: instant attack, very long tail into the room's reverb
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
+    const pan = c.createStereoPanner();
+    pan.pan.value = (Math.random() - 0.5) * 1.4;
+    o.connect(g); g.connect(pan);
+    pan.connect(this.verb);
+    pan.connect(this.sfx);
+    o.start(t);
+    o.stop(t + 3.5);
   }
 
   // ── Building blocks ────────────────────────────────────────────────
@@ -385,6 +460,24 @@ export class NodAudio {
         this.whisperT = 2.5 + Math.random() * 4;
         this.whisper();
       }
+    }
+
+    // ── The score ──
+    // It breathes in as the house grows suspicious, and it stops dead the
+    // moment you are actually being hunted: nothing is more frightening than
+    // the music cutting out because the time for warning you is over.
+    const hunted = s.entityHunting;
+    const swell = hunted ? 0.012 : 0.02 + s.dread * s.dread * 0.075;
+    this.scoreGain.gain.setTargetAtTime(swell, t, hunted ? 0.25 : 1.4);
+    // The cluster opens up as it closes in — more harmonics, more teeth
+    this.scoreFilter.frequency.setTargetAtTime(
+      300 + s.dread * 1500 + (hunted ? 900 : 0), t, 0.8
+    );
+    // A single struck note in the dark, only while it has not found you
+    this.scoreNoteT -= dt;
+    if (this.scoreNoteT <= 0) {
+      this.scoreNoteT = 14 + Math.random() * 22 - s.dread * 8;
+      if (!hunted && !s.hidden) this.scoreNote();
     }
 
     // ── A dying torch buzzes ──
