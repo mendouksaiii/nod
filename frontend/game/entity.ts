@@ -95,6 +95,16 @@ export class Entity {
   private armR = new THREE.Group();
   private legL = new THREE.Group();
   private legR = new THREE.Group();
+  /** Knees, so it can fold rather than rotating rigid pole legs. */
+  private kneeL = new THREE.Group();
+  private kneeR = new THREE.Group();
+  /**
+   * The waist. Everything above the hips hangs off this so a bend pivots at
+   * the hip joint. Without it the torso rotated about its own centre — the
+   * bottom swinging backwards while the top went forwards — which is not a
+   * crouch, it is a capsule spinning on its middle.
+   */
+  private waist = new THREE.Group();
   private gaze!: THREE.SpotLight;
   private gazeTarget = new THREE.Object3D();
   private coneMesh?: THREE.Mesh;
@@ -154,6 +164,9 @@ export class Entity {
   private doubtT = 0;
   /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
   private crouch = 0;
+  /** How far the hips drop in a full crouch, so the feet stay on the floor. */
+  // Measured, not guessed: at 0.5 the sole finished 0.051 below the boards.
+  private crouchDrop = 0.45;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -210,20 +223,23 @@ export class Entity {
       new THREE.CapsuleGeometry(P.torsoR, P.torsoL, 5, 12),
       dark
     );
-    this.torso.position.y = P.hipY + P.torsoL * 0.62;
+    this.waist.position.y = P.hipY;
+    this.root.add(this.waist);
+
+    this.torso.position.y = P.torsoL * 0.62;
     this.torso.castShadow = true;
-    this.root.add(this.torso);
+    this.waist.add(this.torso);
 
     const hips = new THREE.Mesh(
       new THREE.CapsuleGeometry(P.torsoR * 0.9, 0.2, 4, 10),
       dark
     );
-    hips.position.y = P.hipY;
+    hips.position.y = 0;
     hips.castShadow = true;
     this.root.add(hips);
 
     // The head kept its child size. Nothing else did.
-    this.neck.position.y = P.headY;
+    this.neck.position.y = P.headY - P.hipY;
     const skull = new THREE.Mesh(new THREE.SphereGeometry(P.skull, 16, 14), pale);
     skull.scale.set(0.86, 1.05, 0.9);
     skull.castShadow = true;
@@ -241,14 +257,14 @@ export class Entity {
         );
         rib.rotation.y = Math.PI / 2;
         rib.rotation.z = Math.PI * 0.42;
-        rib.position.y = P.hipY + P.torsoL * (0.35 + i * 0.19);
+        rib.position.y = P.torsoL * (0.35 + i * 0.19);
         rib.castShadow = true;
         this.root.add(rib);
       }
       // A spine that has come loose of the back
       for (let i = 0; i < 6; i++) {
         const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 5), pale);
-        knuckle.position.set(-P.torsoR * 0.85, P.hipY + P.torsoL * (0.3 + i * 0.16), 0);
+        knuckle.position.set(-P.torsoR * 0.85, P.torsoL * (0.3 + i * 0.16), 0);
         knuckle.scale.set(0.8, 1, 1.4);
         this.root.add(knuckle);
       }
@@ -327,7 +343,7 @@ export class Entity {
       this.head.add(face);
     }
     this.neck.add(this.head);
-    this.root.add(this.neck);
+    this.waist.add(this.neck);
 
     // Arms long enough to be wrong
     const armLen = (P.headY - P.hipY) * 0.9;
@@ -335,7 +351,7 @@ export class Entity {
       [this.armL, P.torsoR + 0.05],
       [this.armR, -(P.torsoR + 0.05)],
     ] as const) {
-      grp.position.set(0, P.headY - 0.22, z);
+      grp.position.set(0, P.headY - 0.22 - P.hipY, z);
       const upper = new THREE.Mesh(
         new THREE.CapsuleGeometry(P.armR, armLen * 0.45, 4, 8),
         dark
@@ -355,24 +371,32 @@ export class Entity {
       hand.position.y = -armLen * 1.12;
       hand.castShadow = true;
       grp.add(upper, fore, hand);
-      this.root.add(grp);
+      this.waist.add(grp);
     }
 
-    for (const [grp, z] of [
-      [this.legL, 0.14],
-      [this.legR, -0.14],
+    for (const [grp, knee, z] of [
+      [this.legL, this.kneeL, 0.14],
+      [this.legR, this.kneeR, -0.14],
     ] as const) {
       grp.position.set(0, P.hipY, z);
-      const leg = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.072, P.legL, 4, 8),
-        dark
-      );
-      leg.position.y = -P.legL * 0.62;
-      leg.castShadow = true;
+      // Split into thigh and shin about a knee. One rigid capsule from hip to
+      // foot cannot fold, so any crouch either sank the body through the floor
+      // or left the legs sticking straight out.
+      const half = P.legL * 0.5;
+      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.072, half, 4, 8), dark);
+      thigh.position.y = -half * 0.5;
+      thigh.castShadow = true;
+      grp.add(thigh);
+
+      knee.position.y = -half;
+      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.066, half, 4, 8), dark);
+      shin.position.y = -half * 0.5;
+      shin.castShadow = true;
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.15), dark);
-      foot.position.set(0.07, -P.legL - 0.22, 0);
+      foot.position.set(0.07, -half - 0.16, 0);
       foot.castShadow = true;
-      grp.add(leg, foot);
+      knee.add(shin, foot);
+      grp.add(knee);
       this.root.add(grp);
     }
 
@@ -1067,28 +1091,44 @@ export class Entity {
     const stride = Math.min(1, speed / 3.4) * 0.85;
     const sw = Math.sin(this.phase);
 
-    this.legL.rotation.x = -sw * stride;
-    this.legR.rotation.x = sw * stride;
-    this.armL.rotation.x = sw * stride * 0.55;
-    this.armR.rotation.x = -sw * stride * 0.55;
+    // Scaled by how upright it is, so the walk cycle does not fight the
+    // crouch pose set below.
+    const up = 1 - this.crouch;
+    this.legL.rotation.x = -sw * stride * up;
+    this.legR.rotation.x = sw * stride * up;
+    this.armL.rotation.x = sw * stride * 0.55 * up;
+    this.armR.rotation.x = -sw * stride * 0.55 * up;
 
     // ── Folded over ──
     // Only the Crying Man does this, and it is the whole read of him from
     // across the room: a shape on the floor, not a figure walking about.
+    //
+    // The first version rotated the TORSO, which is a capsule parented to the
+    // root at chest height — so it spun about its own middle, the bottom
+    // swinging backwards while the top went forwards. And it rotated rigid
+    // pole legs with no knee while sinking the whole body 0.62 into the
+    // boards. It now bends at a real waist and folds at real knees.
     if (this.sense === "sight") {
-      const want = this.state === "patrol" ? 1 : this.state === "alert" ? 1 - Math.min(1, this.noticeT / 1.15) : 0;
+      const want = this.state === "patrol" ? 1
+        : this.state === "alert" ? 1 - Math.min(1, this.noticeT / 1.15) : 0;
       this.crouch = THREE.MathUtils.damp(this.crouch, want, 4.5, dt);
       const k = this.crouch;
-      this.root.position.y = -0.62 * k + this.climb * 5.4;
-      this.torso.rotation.x = 0.95 * k;      // bent over his own knees
-      this.neck.rotation.x = -0.45 * k;      // face down into his hands
-      this.armL.rotation.x = -1.5 * k;
-      this.armR.rotation.x = -1.45 * k;
-      this.legL.rotation.x = 1.25 * k;
-      this.legR.rotation.x = 1.2 * k;
+
+      // Down onto his heels: thighs forward, shins folded back under him.
+      this.legL.rotation.x = 0.85 * k;
+      this.legR.rotation.x = 0.8 * k;
+      this.kneeL.rotation.x = -1.7 * k;
+      this.kneeR.rotation.x = -1.62 * k;
+      this.root.position.y = -this.crouchDrop * k + this.climb * 5.4;
+
+      // Bend at the WAIST, which pivots at the hip joint where a body does.
+      this.waist.rotation.x = 0.72 * k;
+      this.neck.rotation.x = -0.3 * k; // face down into his hands
+      this.armL.rotation.x = -0.55 * k;
+      this.armR.rotation.x = -0.5 * k;
       // Shaking, not breathing. Faster and shallower than a resting body.
-      const shudder = Math.sin(this.phase * 5.2) * 0.035 * k;
-      this.torso.rotation.z = shudder;
+      const shudder = Math.sin(this.phase * 5.2) * 0.03 * k;
+      this.waist.rotation.z = shudder;
       this.head.rotation.z = shudder * 1.6;
     }
 
