@@ -416,6 +416,55 @@ export function keyTrigger(x: number, y: number, z: number, hw = 1.2): THREE.Box
   );
 }
 
+/**
+ * A clue to the key, scratched on a wall by a child who got this far.
+ *
+ * The house gets harder as it goes down, and the honest way to do that is not
+ * to hide the key better — it is to tell you less about it. On seven the note
+ * all but points at the thing. By the mirror floor the child who wrote it was
+ * too frightened to be much use, and you are mostly on your own.
+ *
+ * `keyX` and `keyY` are the key's real position, so the wording is generated
+ * from where the seed actually put it rather than hand-written per floor and
+ * left to rot when a placement moves.
+ */
+export function keyClue(
+  group: THREE.Group,
+  floor: number,
+  atX: number,
+  keyX: number,
+  keyY: number,
+  bounds: { minX: number; maxX: number }
+) {
+  const ahead = keyX > atX;
+  const dir = ahead ? "further in" : "back the way you came";
+  const high = keyY > 2.2;
+  const third =
+    keyX < bounds.minX + (bounds.maxX - bounds.minX) / 3 ? "near where you woke"
+      : keyX > bounds.maxX - (bounds.maxX - bounds.minX) / 3 ? "near the stairs"
+      : "in the middle somewhere";
+
+  let text: string;
+  if (floor >= 7) {
+    // Explicit. Somebody calm enough to write a proper sentence.
+    text = high
+      ? `the key is ${dir}, ${third}. it is UP HIGH — you have to climb`
+      : `the key is ${dir}, ${third}. it is down where you can reach`;
+  } else if (floor >= 5) {
+    text = high ? `key is ${third}. look UP` : `key is ${third}. look low`;
+  } else if (floor >= 3) {
+    text = high ? "it keeps them high up" : "it keeps them low down";
+  } else {
+    // Barely a clue at all by now.
+    text = high ? "look up" : "dont look up";
+  }
+
+  // Fainter the deeper it is, because the child writing it was further gone.
+  // Seven is legible; two is nearly a smear on the plaster.
+  const ink = floor >= 7 ? "#8d94a8" : floor >= 5 ? "#79839c" : "#5f6678";
+  writing(group, text, atX, 1.85, Math.min(5.4, 2.6 + text.length * 0.055), ink);
+}
+
 export function makeKey(): THREE.Group {
   const g = new THREE.Group();
   const brass = new THREE.MeshStandardMaterial({

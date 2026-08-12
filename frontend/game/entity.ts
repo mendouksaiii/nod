@@ -19,6 +19,29 @@ const SUSPICION_RISE = 1.7;
 // Slower than it rises — once it has an idea where you are, it keeps it.
 const SUSPICION_FALL = 0.36;
 const SEARCH_SECONDS = 6.0;
+
+/**
+ * How hard a floor's warden looks for a child who has hidden.
+ *
+ * Seven does not look at all, and that is deliberate: hiding has to be
+ * reliably safe exactly once, or the player never learns to trust it. The
+ * nursery is where you find out that stillness works. Every floor below is
+ * where you find out it stops working — each one checks more places, over a
+ * wider stretch of the floor, and lingers less over each before moving on.
+ */
+function searchProfile(floor: number): {
+  places: number;
+  radius: number;
+  dwell: number;
+} {
+  if (floor >= 7) return { places: 0, radius: 0, dwell: 0 };
+  const depth = 6 - floor; // 0 on the baths → 4 on the mirror floor
+  return {
+    places: Math.min(6, 2 + Math.round(depth * 0.9)),
+    radius: 9 + depth * 2.6,
+    dwell: Math.max(0.5, 1.5 - depth * 0.24),
+  };
+}
 const LOST_GRACE = 1.0;
 
 /**
@@ -679,8 +702,9 @@ export class Entity {
           this.faceToward(goal);
           this.vx = THREE.MathUtils.damp(this.vx, Math.sign(dx) * SEARCH_SPEED, 5, dt);
         } else if (next) {
-          // Arrived at a hiding place — stop and look in it
-          this.checkingT = 1.4;
+          // Arrived at a hiding place — stop and look in it. The deeper the
+          // floor, the less time it wastes being sure.
+          this.checkingT = searchProfile(floor.floor).dwell;
         } else {
           this.vx = THREE.MathUtils.damp(this.vx, 0, 7, dt);
           this.headSweep += dt * 2.2;
@@ -732,6 +756,13 @@ export class Entity {
    * thing that walks a route and a thing that is looking for you.
    */
   private planSearch(floor: FloorBuild) {
+    const prof = searchProfile(floor.floor);
+    // On seven this yields nothing, so it mills around where it lost you and
+    // never opens anything. That is the floor teaching you that hiding works.
+    if (prof.places === 0) {
+      this.toSearch = [];
+      return;
+    }
     this.toSearch = floor.interactables
       .filter((i) => i.type === "hide")
       .map((i) => {
@@ -739,12 +770,12 @@ export class Entity {
         i.trigger.getCenter(c);
         return { x: c.x, checked: false };
       })
-      .filter((h) => Math.abs(h.x - this.lastSeenX) < 13)
+      .filter((h) => Math.abs(h.x - this.lastSeenX) < prof.radius)
       .sort(
         (a, b) =>
           Math.abs(a.x - this.lastSeenX) - Math.abs(b.x - this.lastSeenX)
       )
-      .slice(0, 3);
+      .slice(0, prof.places);
   }
 
   private patrol(dt: number) {

@@ -5,7 +5,10 @@ import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, us
 import { activeChain } from "@/lib/network";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
 
-type Phase = "title" | "connecting" | "waking" | "playing" | "error";
+type Phase = "title" | "connecting" | "waking" | "verified" | "playing" | "error";
+
+/** One line of the end-to-end wallet check shown before the run starts. */
+type Check = { label: string; detail: string; ok: boolean };
 
 const shell: React.CSSProperties = {
   position: "fixed",
@@ -20,6 +23,9 @@ const shell: React.CSSProperties = {
   fontFamily: "Georgia, serif",
   textAlign: "center",
   padding: "2rem",
+  // The controls panel makes this screen taller than a short laptop window,
+  // and a fixed full-bleed flex container clips instead of scrolling.
+  overflowY: "auto",
 };
 
 const button: React.CSSProperties = {
@@ -34,6 +40,16 @@ const button: React.CSSProperties = {
   cursor: "pointer",
 };
 
+/** Shown on the title screen. Keep in step with Input and README. */
+const CONTROLS: [string, string][] = [
+  ["A  D", "move. he is eight — he does not move quickly"],
+  ["Shift", "run. faster, and much louder"],
+  ["C", "sneak. slow and quiet, and you stay low"],
+  ["E", "interact — take, open, read, hide, climb, come out"],
+  ["Q", "throw what you are carrying, to make a noise elsewhere"],
+  ["F", "torch on and off. it has a battery, and the dark is safer"],
+];
+
 export default function Title() {
   const [phase, setPhase] = useState<Phase>("title");
   const [message, setMessage] = useState("");
@@ -46,6 +62,14 @@ export default function Title() {
   const handOverRef = useRef<(() => void) | null>(null);
   /** Guards against beginRun being entered twice as wagmi's values land. */
   const startedRef = useRef(false);
+  /** The name he goes by. Kept for the memorial and the end-of-run card. */
+  const [playerName, setPlayerName] = useState("");
+  /** Every hop from wallet to gameplay, shown before you are let in. */
+  const [checks, setChecks] = useState<Check[]>([]);
+  const [showControls, setShowControls] = useState(false);
+  /** True until the game reports its first drawn frame. */
+  const [booting, setBooting] = useState(false);
+  const linkRef = useRef<HouseLink | null>(null);
 
   const { address, isConnected } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
@@ -137,10 +161,15 @@ export default function Title() {
     void (async () => {
       const { NodGame } = await import("@/game/game");
       if (cancelled || gameRef.current || !hostRef.current) return;
-      gameRef.current = new NodGame(hostRef.current, startWith.link);
+      const g = new NodGame(hostRef.current, startWith.link, playerName.trim());
+      // The spinner comes down on the first DRAWN frame, not on the
+      // constructor returning — building the floor and compiling shaders
+      // happen after construction, and that gap is the black rectangle.
+      g.onReady = () => setBooting(false);
+      gameRef.current = g;
     })();
     return () => { cancelled = true; };
-  }, [phase, startWith]);
+  }, [phase, startWith, playerName]);
 
   async function wake() {
     startedRef.current = false; // so TRY AGAIN genuinely tries again
@@ -202,6 +231,7 @@ export default function Title() {
    */
   function startOffline() {
     setStartWith({ link: null });
+    setBooting(true);
     setPhase("playing");
   }
 
@@ -216,28 +246,55 @@ export default function Title() {
       return;
     }
     setPhase("waking");
+
+    // Each hop from wallet to gameplay, checked and shown. "Connected" on its
+    // own proves almost nothing: you can be connected to the wrong chain, to a
+    // house that was never sealed, or holding an account the contract has
+    // never heard of. Each line below is a thing that can independently fail.
+    const found: Check[] = [];
+    const push = (label: string, detail: string, ok = true) => {
+      found.push({ label, detail, ok });
+      setChecks([...found]);
+    };
+
     try {
+      push("wallet", `${address.slice(0, 6)}…${address.slice(-4)}`);
+
       if (chainId !== activeChain.id) {
         setMessage("this house is on base sepolia…");
         await switchChainAsync({ chainId: activeChain.id });
       }
-
-      const link = new HouseLink(publicClient as never, walletClient, address);
+      push("network", activeChain.name);
 
       if (!HOUSE_ADDRESS) throw new Error("the house has no address configured");
-      if (!(await link.isSealed())) throw new Error("this house has not been sealed yet");
+      const link = new HouseLink(publicClient as never, walletClient, address);
+
+      const sealed = await link.isSealed();
+      if (!sealed) throw new Error("this house has not been sealed yet");
+      push("house", `${HOUSE_ADDRESS.slice(0, 8)}… sealed`);
 
       // A run that is already underway is resumed rather than restarted.
       const run = await link.runState();
       if (!run.active) {
         setMessage("the house learns your name…");
         await link.enterHouse();
+        push("run", "entered — floor 7");
       } else {
-        setMessage(`you were on the ${run.floor}th floor…`);
+        push("run", `resumed — floor ${run.floor}`);
       }
 
-      setStartWith({ link });
-      setPhase("playing");
+      // Proof the encrypted layer is actually reachable for THIS wallet, not
+      // just that the contract exists: the seed for the floor you are about to
+      // stand on was minted by the TEE and granted to you alone.
+      try {
+        const seed = await link.floorSeed(run.active ? run.floor : 7);
+        push("encrypted seed", seed === null ? "granted, not yet resolved" : "resolved for this wallet");
+      } catch {
+        push("encrypted seed", "unreadable — the floor will use a local layout", false);
+      }
+
+      linkRef.current = link;
+      setPhase("verified");
     } catch (err: unknown) {
       startedRef.current = false;
       setPhase("error");
@@ -246,12 +303,43 @@ export default function Title() {
     }
   }
 
+  /** Called from the verified screen — this is the actual door. */
+  function enterVerified() {
+    setStartWith({ link: linkRef.current });
+    setBooting(true);
+    setPhase("playing");
+  }
+
   if (phase === "playing") {
     return (
-      <div
-        ref={hostRef}
-        style={{ position: "fixed", inset: 0, background: "#07090d", overflow: "hidden" }}
-      />
+      <>
+        <div
+          ref={hostRef}
+          style={{ position: "fixed", inset: 0, background: "#07090d", overflow: "hidden" }}
+        />
+        {/* Sits OVER the live canvas and fades out on the first drawn frame,
+            so the player never stares at an undecorated black rectangle
+            wondering whether their click registered. */}
+        <div
+          style={{
+            ...shell,
+            pointerEvents: booting ? "auto" : "none",
+            opacity: booting ? 1 : 0,
+            transition: "opacity 0.9s ease",
+          }}
+        >
+          <p style={{ letterSpacing: "0.5em", fontSize: "1.1rem", opacity: 0.75, margin: 0 }}>
+            N O D
+          </p>
+          <p style={{ opacity: 0.4, fontStyle: "italic", fontSize: "0.88rem", marginTop: "1.4rem" }}>
+            the house is being built around you…
+          </p>
+          <div style={{ width: "13rem", height: 1, background: "rgba(200,210,190,0.12)", marginTop: "1.6rem", overflow: "hidden" }}>
+            <div style={{ width: "40%", height: "100%", background: "rgba(200,210,190,0.5)", animation: "nodslide 1.5s ease-in-out infinite" }} />
+          </div>
+          <style>{"@keyframes nodslide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}"}</style>
+        </div>
+      </>
     );
   }
 
@@ -271,6 +359,20 @@ export default function Title() {
             <br />
             other children woke here before you. some of them are still here.
           </p>
+          {/* He has to be called something. It goes on the memorial. */}
+          <input
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value.slice(0, 18))}
+            placeholder="what shall the house call you?"
+            spellCheck={false}
+            style={{
+              marginTop: "1.2rem", padding: "0.6rem 1rem", width: "min(22rem, 80vw)",
+              background: "rgba(255,255,255,0.03)", color: "#c8d2be", textAlign: "center",
+              border: "1px solid rgba(200,210,190,0.22)", fontFamily: "Georgia, serif",
+              fontSize: "0.9rem", letterSpacing: "0.06em", outline: "none",
+            }}
+          />
+
           <button style={button} onClick={() => void wake()}>
             WAKE UP
           </button>
@@ -285,6 +387,96 @@ export default function Title() {
             onClick={startOffline}
           >
             WAKE UP WITHOUT BEING REMEMBERED
+          </button>
+
+          <button
+            onClick={() => setShowControls((v) => !v)}
+            style={{
+              ...button, marginTop: "1.6rem", fontSize: "0.72rem", padding: "0.4rem 1.2rem",
+              letterSpacing: "0.2em", opacity: 0.45, border: "none",
+              textDecoration: "underline", textUnderlineOffset: "0.4rem",
+            }}
+          >
+            {showControls ? "CLOSE" : "HOW TO PLAY"}
+          </button>
+
+          {showControls && (
+            <div
+              style={{
+                marginTop: "1.2rem", padding: "1.4rem 1.6rem",
+                border: "1px solid rgba(200,210,190,0.16)",
+                background: "rgba(255,255,255,0.02)",
+                width: "min(34rem, 90vw)", textAlign: "left",
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                <tbody>
+                  {CONTROLS.map(([k, what]) => (
+                    <tr key={k}>
+                      <td
+                        style={{
+                          padding: "0.42rem 0.9rem 0.42rem 0", width: "5.5rem",
+                          verticalAlign: "top",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block", minWidth: "2.1rem", textAlign: "center",
+                            padding: "0.18rem 0.45rem", color: "#d8e0cc",
+                            border: "1px solid rgba(200,210,190,0.4)",
+                            fontFamily: "ui-monospace, Menlo, monospace", fontSize: "0.76rem",
+                          }}
+                        >
+                          {k}
+                        </span>
+                      </td>
+                      <td style={{ padding: "0.42rem 0", opacity: 0.62, lineHeight: 1.5 }}>{what}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ opacity: 0.4, fontSize: "0.76rem", lineHeight: 1.8, marginTop: "1.1rem", marginBottom: 0 }}>
+                every floor is held by something that hunts by <em>one</em> sense. work out
+                which, and what denies it. find the key, open the stairs, go down.
+                <br />
+                on the top floor, hiding always works. it stops being that simple.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {phase === "verified" && (
+        <>
+          <p style={{ opacity: 0.5, fontSize: "0.86rem", marginTop: "1.2rem", marginBottom: 0 }}>
+            the house has you{playerName.trim() ? `, ${playerName.trim()}` : ""}.
+          </p>
+          <div
+            style={{
+              marginTop: "1.2rem", padding: "1.1rem 1.4rem", textAlign: "left",
+              border: "1px solid rgba(200,210,190,0.16)",
+              background: "rgba(255,255,255,0.02)", width: "min(30rem, 90vw)",
+            }}
+          >
+            {checks.map((c) => (
+              <div
+                key={c.label}
+                style={{
+                  display: "flex", justifyContent: "space-between", gap: "1rem",
+                  padding: "0.3rem 0", fontSize: "0.8rem",
+                }}
+              >
+                <span style={{ opacity: 0.45 }}>
+                  {c.ok ? "✓" : "!"} {c.label}
+                </span>
+                <span style={{ opacity: 0.7, color: c.ok ? "#c8d2be" : "#c9a06a", textAlign: "right" }}>
+                  {c.detail}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button style={button} onClick={enterVerified}>
+            GO DOWN
           </button>
         </>
       )}

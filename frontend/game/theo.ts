@@ -344,8 +344,8 @@ export class Theo {
       // that was supposedly holding it, so the arm moved and the bear did not.
       // Attached to the elbow it is carried — the clutch comes from the arm
       // pose, and the bear simply goes where the arm goes.
-      this.bear.position.set(-0.02, -0.115, 0.085);
-      this.bear.rotation.set(0.15, -0.25, -0.5);
+      this.bear.position.set(-0.075, -0.145, 0.055);
+      this.bear.rotation.set(0.1, -0.2, -1.15);
       this.bear.scale.setScalar(1.3);
       this.bear.visible = false; // until he picks it up off the pillow
       this.elbowR.add(this.bear);
@@ -803,8 +803,12 @@ export class Theo {
     // Named for what the hand holds, not for which side it is on — the two
     // have been swapped once already and side-named variables made that a
     // rename in six places instead of one.
-    const shBear = -0.62 - clutch * 0.3 + swArm * armSwing * 0.12;
-    const elBear = 1.15 + clutch * 0.35;
+    // Cradling, not presenting. The upper arm hangs close to his ribs and the
+    // forearm comes across his belly, so the bear rests in the crook against
+    // his chest. Held further out with the elbow half-open it read as an arm
+    // sticking out sideways with a toy balanced on it.
+    const shBear = -0.34 - clutch * 0.2 + swArm * armSwing * 0.07;
+    const elBear = 1.5 + clutch * 0.25;
 
     // He is holding a torch, so the right arm never simply hangs — it is out
     // in front of him at all times, lit or not. Letting it swing at his side
@@ -849,7 +853,8 @@ export class Theo {
     );
 
     // The bear-arm stays tucked in; the free arm hangs away from the body
-    this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, 0.34 + clutch * 0.1, 8, dt);
+    // Elbow tucked IN against his side rather than winged out
+    this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, 0.14 + clutch * 0.06, 8, dt);
     this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, sneaking ? -0.3 : -0.16, 8, dt);
 
     // Bear: the arm carries it now, so almost nothing is driven here. What
@@ -857,10 +862,10 @@ export class Theo {
     // into himself. The old code moved it across his whole body every frame,
     // which is what made it look like it was drifting around him rather than
     // being held.
-    this.bear.position.z = THREE.MathUtils.damp(this.bear.position.z, 0.085 - clutch * 0.025, 6, dt);
-    this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, -0.115 + clutch * 0.015, 6, dt);
+    this.bear.position.z = THREE.MathUtils.damp(this.bear.position.z, 0.055 - clutch * 0.02, 6, dt);
+    this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, -0.145 + clutch * 0.015, 6, dt);
     this.bear.rotation.z = THREE.MathUtils.damp(
-      this.bear.rotation.z, -0.5 - clutch * 0.12, 7, dt
+      this.bear.rotation.z, -1.15 - clutch * 0.1, 7, dt
     );
 
     // The lens is only lit when the torch is, and the torch throws a little

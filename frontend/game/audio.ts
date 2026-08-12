@@ -339,10 +339,12 @@ export class NodAudio {
   private burst(opts: {
     dur: number; gain: number; type?: BiquadFilterType; hz: number; q?: number;
     hzEnd?: number; pan?: number; attack?: number; dest?: AudioNode;
+    /** Seconds to hold off, scheduled on the audio clock rather than setTimeout. */
+    delay?: number;
   }) {
     if (!this.started) return;
     const c = this.ctx!;
-    const t = this.now();
+    const t = this.now() + (opts.delay ?? 0);
     const src = c.createBufferSource();
     src.buffer = this.noise;
     src.loop = true;
@@ -375,10 +377,12 @@ export class NodAudio {
   private tone(opts: {
     hz: number; hzEnd?: number; dur: number; gain: number;
     type?: OscillatorType; pan?: number; attack?: number; dest?: AudioNode;
+    /** Seconds to hold off, scheduled on the audio clock rather than setTimeout. */
+    delay?: number;
   }) {
     if (!this.started) return;
     const c = this.ctx!;
-    const t = this.now();
+    const t = this.now() + (opts.delay ?? 0);
     const o = c.createOscillator();
     o.type = opts.type ?? "sine";
     o.frequency.setValueAtTime(opts.hz, t);
@@ -721,6 +725,59 @@ export class NodAudio {
   hunt() {
     this.tone({ hz: 110, hzEnd: 88, dur: 1.6, gain: 0.12, type: "sawtooth", attack: 0.02 });
     this.tone({ hz: 164, hzEnd: 131, dur: 1.6, gain: 0.08, type: "square", attack: 0.02 });
+  }
+
+  /**
+   * Each warden's own voice, thrown the moment it commits to a hunt.
+   *
+   * They were all children, so none of these is a roar — they are the sound of
+   * a child's noise made wrong by whatever the floor did to it. You should be
+   * able to tell which floor you are on with your eyes shut.
+   */
+  wardenCry(shape: string) {
+    switch (shape) {
+      case "nursery": // a lullaby hummed by something with no breath
+        this.tone({ hz: 392, hzEnd: 370, dur: 1.5, gain: 0.09, type: "triangle", attack: 0.06 });
+        this.tone({ hz: 588, hzEnd: 553, dur: 1.4, gain: 0.05, type: "sine", attack: 0.1 });
+        break;
+      case "listener": // drowned — a cry coming up through water
+        this.burst({ dur: 1.5, gain: 0.13, hz: 420, hzEnd: 180, q: 2.2, attack: 0.2 });
+        this.tone({ hz: 210, hzEnd: 140, dur: 1.6, gain: 0.07, type: "sine", attack: 0.25 });
+        break;
+      case "feeder": // wet, close, chewing
+        this.burst({ dur: 0.5, gain: 0.16, hz: 900, hzEnd: 300, q: 1.1, attack: 0.005 });
+        this.burst({ dur: 0.4, gain: 0.12, hz: 600, hzEnd: 220, q: 1.4, attack: 0.12 });
+        this.tone({ hz: 96, hzEnd: 70, dur: 1.2, gain: 0.11, type: "sawtooth", attack: 0.01 });
+        break;
+      case "whisperer": // dry as paper — all consonant, no voice
+        this.burst({ dur: 1.9, gain: 0.1, hz: 3400, hzEnd: 1500, q: 0.8, attack: 0.3 });
+        this.tone({ hz: 1720, hzEnd: 1610, dur: 1.2, gain: 0.03, type: "sine", attack: 0.35 });
+        break;
+      case "constrictor": // under the boards, felt before heard
+        this.tone({ hz: 54, hzEnd: 38, dur: 2.1, gain: 0.17, type: "sine", attack: 0.05 });
+        this.burst({ dur: 1.0, gain: 0.08, hz: 260, hzEnd: 90, q: 2.6, attack: 0.02 });
+        break;
+      case "mirror": // your own voice, a half-step out
+        this.tone({ hz: 466, hzEnd: 466, dur: 1.3, gain: 0.07, type: "triangle", attack: 0.04 });
+        this.tone({ hz: 494, hzEnd: 494, dur: 1.3, gain: 0.07, type: "triangle", attack: 0.04 });
+        break;
+    }
+  }
+
+  /**
+   * The jump scare. Deliberately the only moment in the game that is allowed
+   * to be loud, because everything else is restraint — and a scare only lands
+   * against a floor that has been quiet.
+   */
+  jumpScare() {
+    const t = this.now();
+    // Silence a beat FIRST. The hole is what makes the hit land.
+    this.droneGain.gain.setTargetAtTime(0.0001, t, 0.02);
+    this.scoreGain.gain.setTargetAtTime(0.0001, t, 0.02);
+    // Then the hit, a fraction late
+    this.tone({ hz: 1800, hzEnd: 60, dur: 0.5, gain: 0.34, type: "sawtooth", attack: 0.001, delay: 0.05 });
+    this.burst({ dur: 0.75, gain: 0.3, hz: 5200, hzEnd: 200, q: 0.5, attack: 0.001, delay: 0.05 });
+    this.tone({ hz: 47, hzEnd: 31, dur: 2.4, gain: 0.26, type: "square", attack: 0.004, delay: 0.05 });
   }
 
   /** It has you. */

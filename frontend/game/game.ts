@@ -90,7 +90,22 @@ export class NodGame {
     };
   }
 
-  constructor(private container: HTMLElement, bridge: HouseBridge | null = null) {
+  /**
+   * Fired once, after the first frame is genuinely on screen. The loading
+   * screen waits on this rather than on the constructor returning: building
+   * the floor, compiling shaders and warming the shadow maps all happen after
+   * construction, and hiding the spinner before that just shows the player a
+   * frozen black rectangle instead of a spinner.
+   */
+  onReady: (() => void) | null = null;
+  private announcedReady = false;
+
+  constructor(
+    private container: HTMLElement,
+    bridge: HouseBridge | null = null,
+    /** Shown on the memorial and on the card when a run ends. */
+    public readonly playerName: string = ""
+  ) {
     this.bridge = bridge;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -363,7 +378,15 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  throw      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
-    return { battery: battery as HTMLDivElement, torchTag, prompt, hint, vignette, blackout, card, sub, grade, page };
+    // The jump scare flash. Full-bleed, sits above everything, and is only
+    // ever visible for about two frames.
+    const scare = mk({
+      inset: "0", left: "0", top: "0", width: "100%", height: "100%",
+      background: "radial-gradient(circle at 50% 45%, #fff 0%, #e9d9c8 35%, #6d1d12 100%)",
+      opacity: "0", mixBlendMode: "screen",
+    });
+
+    return { battery: battery as HTMLDivElement, torchTag, prompt, hint, vignette, blackout, card, sub, grade, page, scare };
   }
 
   private showCard(text: string, subtext = "", hold = 2600) {
@@ -562,6 +585,12 @@ export class NodGame {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    if (!this.announcedReady && this.floor) {
+      this.announcedReady = true;
+      // One more frame after this one has been drawn, so the handler fires
+      // against a picture rather than against an empty buffer.
+      requestAnimationFrame(() => this.onReady?.());
+    }
     if (!this.floor) {
       this.renderer.render(this.scene, this.cam.camera);
       return;
@@ -720,8 +749,25 @@ export class NodGame {
     const st = this.entity?.state ?? "patrol";
     if (st !== this.lastEntityState) {
       if (st === "alert") { this.audio.spotted(); this.cam.shake(0.12); }
-      else if (st === "hunt") { this.audio.hunt(); this.cam.shake(0.3); }
-      else if (st === "seize") { this.audio.caught(); this.cam.shake(0.75); }
+      else if (st === "hunt") {
+        this.audio.hunt();
+        // Its own voice, so you can tell which floor you are on with your
+        // eyes shut — and know what is coming before you turn round.
+        this.audio.wardenCry(this.floor.entity?.shape ?? "nursery");
+        this.cam.shake(0.3);
+      } else if (st === "seize") {
+        this.audio.jumpScare();
+        this.audio.caught();
+        this.cam.shake(0.95);
+        this.hud.scare.style.transition = "none";
+        this.hud.scare.style.opacity = "1";
+        // Two frames of white, then it is gone. Any longer and it stops being
+        // a shock and starts being a screen.
+        setTimeout(() => {
+          this.hud.scare.style.transition = "opacity 0.5s";
+          this.hud.scare.style.opacity = "0";
+        }, 90);
+      }
       this.lastEntityState = st;
     }
 

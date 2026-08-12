@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
   FloorBuild, journalPage, makeKey,
+  keyClue,
   keyTrigger, picture, shell, solid, stairwellDoor,
   usable, writing, Zone,
 } from "../build";
@@ -331,6 +332,13 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
     trigger: keyTrigger(spots[keySpot].x, spots[keySpot].y, spots[keySpot].z, 1.2),
     label: "take the reeking key", mesh: key, isKey: true, tag: "reeking",
   });
+
+  // Somebody who got this far wrote down where it was. The deeper the
+  // floor, the less they managed to say. The note goes near the start,
+  // where you will actually walk past it before you need it.
+  const boundsFor = { minX: 0.7, maxX: 103.3 };
+  const clueX = 9.5;
+  keyClue(group, 5, clueX, spots[keySpot].x, spots[keySpot].y, boundsFor);
 
   fills(group, [[5, 40], [19, 45], [36, 45], [54, 45], [69, 35], [83, 40], [97, 45]], 0x3a3020);
   scene.add(group);
