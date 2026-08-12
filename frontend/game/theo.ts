@@ -28,6 +28,16 @@ export class Theo {
   private hipR = new THREE.Group();
   private kneeL = new THREE.Group();
   private kneeR = new THREE.Group();
+  /** Ankles, so the feet roll through a step instead of staying flat planks. */
+  private ankleL = new THREE.Group();
+  private ankleR = new THREE.Group();
+  /**
+   * The spine. Everything above the waist hangs off this rather than off the
+   * pelvis, so the torso can curve and counter-rotate against the hips. Without
+   * it the head, both arms and the chest are welded to one bone and he walks
+   * like a board on legs.
+   */
+  private chest = new THREE.Group();
   private shoulderL = new THREE.Group();
   private shoulderR = new THREE.Group();
   private elbowL = new THREE.Group();
@@ -134,7 +144,11 @@ export class Theo {
     const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.172, 0.166, 0.09, 12), hoodDark);
     hem.position.y = 0.015;
     hem.castShadow = true;
-    hipRoot.add(this.torso, pocket, hem, collar, hood, ...this.drawstrings);
+    // The hem belongs to the pelvis; everything above it rides the spine. The
+    // chest sits at the hip origin, so it bends from the waist and every child
+    // keeps the local position it was authored with.
+    hipRoot.add(hem, this.chest);
+    this.chest.add(this.torso, pocket, collar, hood, ...this.drawstrings);
 
     // ── Head ──
     // He has a face. It is the thing you are trying to keep, so you have to
@@ -206,15 +220,15 @@ export class Theo {
     }
 
     this.neck.add(headGroup);
-    hipRoot.add(this.neck);
+    this.chest.add(this.neck);
 
     // ── Legs: hip → knee → shin, each hinging at its top ──
     const thighGeo = new THREE.CapsuleGeometry(0.058, 0.13, 3, 8);
     const shinGeo = new THREE.CapsuleGeometry(0.05, 0.13, 3, 8);
     const footGeo = new THREE.BoxGeometry(0.15, 0.055, 0.1);
-    for (const [hip, knee, z] of [
-      [this.hipL, this.kneeL, 0.075],
-      [this.hipR, this.kneeR, -0.075],
+    for (const [hip, knee, ankle, z] of [
+      [this.hipL, this.kneeL, this.ankleL, 0.075],
+      [this.hipR, this.kneeR, this.ankleR, -0.075],
     ] as const) {
       hip.position.set(0, 0.44, z);
       const thigh = new THREE.Mesh(thighGeo, shorts);
@@ -226,10 +240,14 @@ export class Theo {
       const shin = new THREE.Mesh(shinGeo, skin);
       shin.position.y = -0.1;
       shin.castShadow = true;
+      // The ankle pivots at the back of the foot, so plantarflexing rolls him
+      // up onto the toes rather than spinning the shoe about its middle.
+      ankle.position.y = -0.2;
       const foot = new THREE.Mesh(footGeo, skin);
-      foot.position.set(0.03, -0.2, 0);
+      foot.position.set(0.045, -0.01, 0);
       foot.castShadow = true;
-      knee.add(shin, foot);
+      ankle.add(foot);
+      knee.add(shin, ankle);
       hip.add(knee);
       this.body.add(hip);
     }
@@ -253,7 +271,7 @@ export class Theo {
       fore.castShadow = true;
       el.add(fore);
       sh.add(el);
-      hipRoot.add(sh);
+      this.chest.add(sh);
     }
 
     this.body.add(hipRoot);
@@ -430,10 +448,12 @@ export class Theo {
         this.kneeR.rotation.x = reach * 1.1;
         this.hipRoot.rotation.x = reach * 0.5;
         this.neck.rotation.x = -reach * 0.3;
+        this.settleSpine(dt, reach * 0.35, 10);
 
         if (this.mantleT >= 1) {
           this.root.position.copy(this.mantleTo);
           this.hipRoot.rotation.x = 0;
+          this.chest.rotation.set(0, 0, 0);
           this.neck.rotation.x = 0;
           this.state = "move";
           this.grounded = true;
@@ -465,6 +485,7 @@ export class Theo {
           this.elbowL.rotation.x = 0.3 + a * 0.35;
           this.elbowR.rotation.x = 0.3 + a * 0.35;
           this.neck.rotation.x = a * -0.55; // head stays level, looking out
+          this.settleSpine(dt, a * 0.45, 9);
         } else {
           // Pressed back and small, arms pinned to his sides
           this.body.position.y = a * -0.1;
@@ -478,6 +499,7 @@ export class Theo {
           this.elbowL.rotation.x = 0.3 + a * 0.9;
           this.elbowR.rotation.x = 0.3 + a * 0.9;
           this.neck.rotation.x = a * -0.15;
+          this.settleSpine(dt, a * 0.1, 9);
         }
 
         // Held breath: shallower, faster the deeper he's tucked in
@@ -489,6 +511,7 @@ export class Theo {
           this.state = "move";
           this.currentHide = null;
           this.hipRoot.rotation.x = 0;
+          this.chest.rotation.set(0, 0, 0);
           this.body.position.y = 0;
           this.neck.rotation.x = 0;
         }
@@ -513,6 +536,7 @@ export class Theo {
         this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, 0.3 + fall * 0.5, 9, dt);
         this.body.position.y = THREE.MathUtils.damp(this.body.position.y, fall * -0.2, 10, dt);
         this.neck.rotation.x = THREE.MathUtils.damp(this.neck.rotation.x, fall * 0.5, 7, dt);
+        this.settleSpine(dt, fall * 0.3, 7);
         this.body.rotation.z = THREE.MathUtils.damp(this.body.rotation.z, 0, 6, dt);
 
         if (this.staggerT <= 0) this.state = "move";
@@ -642,6 +666,25 @@ export class Theo {
    * trailing swing, the torso counter-rotates against the arms, and the head
    * leads turns — the difference between "boxes sliding" and "a child walking".
    */
+  /**
+   * Ease the joints that only the walk cycle drives back to a resting pose.
+   *
+   * Mantling, hiding and falling author themselves on the pelvis alone. Without
+   * this, the spine twist, pelvic list and ankle roll left over from the last
+   * walking frame would stay frozen on him for the whole hide — one foot stuck
+   * up on its toes while he lies flat under a bed.
+   */
+  private settleSpine(dt: number, chestPitch: number, rate = 8) {
+    const d = THREE.MathUtils.damp;
+    this.chest.rotation.x = d(this.chest.rotation.x, chestPitch, rate, dt);
+    this.chest.rotation.y = d(this.chest.rotation.y, 0, rate, dt);
+    this.chest.rotation.z = d(this.chest.rotation.z, 0, rate, dt);
+    this.hipRoot.rotation.y = d(this.hipRoot.rotation.y, 0, rate, dt);
+    this.hipRoot.rotation.z = d(this.hipRoot.rotation.z, 0, rate, dt);
+    this.ankleL.rotation.x = d(this.ankleL.rotation.x, 0, rate, dt);
+    this.ankleR.rotation.x = d(this.ankleR.rotation.x, 0, rate, dt);
+  }
+
   private animate(dt: number, input: Input, dir: number) {
     const speed = Math.abs(this.vx);
     const sneaking = input.sneak;
@@ -682,6 +725,20 @@ export class Theo {
       this.hipR.rotation.x -= 0.2;
     }
 
+    // ── Ankles: the foot rolls through the step ──
+    // A leg behind him is pushing off, so the heel lifts and he goes up onto
+    // the toes; a leg reaching in front lands heel-first with the toes up.
+    // Flat rigid feet that stay parallel to the floor are the single loudest
+    // stiffness cue in a side-on walk, because you see the whole sole.
+    const ankleFor = (s: number) =>
+      (Math.max(0, -s) * 0.85 - Math.max(0, s) * 0.4) * stride;
+    this.ankleL.rotation.x = THREE.MathUtils.damp(
+      this.ankleL.rotation.x, ankleFor(sw) + (sneaking ? 0.2 : 0), 13, dt
+    );
+    this.ankleR.rotation.x = THREE.MathUtils.damp(
+      this.ankleR.rotation.x, ankleFor(-sw) + (sneaking ? 0.2 : 0), 13, dt
+    );
+
     // ── Arms ──
     // The left arm is not available. It is holding the bear, and it holds it
     // tighter the more frightened he is. Everything else — the torch, the
@@ -690,8 +747,13 @@ export class Theo {
     const holdingUp = this.flashOn && this.battery > 0;
     const armSwing = stride * 0.72;
 
+    // Arms trail the legs by a fraction of a step. Real limbs never arrive at
+    // their pose on the same frame as the hips — that overlap is most of what
+    // separates a walk cycle from a metronome.
+    const swArm = Math.sin(p - 0.42);
+
     const clutch = THREE.MathUtils.clamp(this.fear, 0, 1);
-    const shL = -0.62 - clutch * 0.3 + sw * armSwing * 0.12;
+    const shL = -0.62 - clutch * 0.3 + swArm * armSwing * 0.12;
     const elL = 1.15 + clutch * 0.35;
 
     // He is holding a torch, so the right arm never simply hangs — it is out
@@ -701,18 +763,18 @@ export class Theo {
     // horizontal — not just the upper arm. Shoulder near -1.25rad with the
     // elbow almost straight puts the barrel out in front of him; anything
     // shallower and it quietly goes back to pointing at the floor.
-    let shR = -1.25 - sw * armSwing * 0.14;
-    let elR = 0.12 + Math.max(0, -sw) * 0.08;
+    let shR = -1.25 - swArm * armSwing * 0.14;
+    let elR = 0.12 + Math.max(0, -swArm) * 0.08;
     if (carrying) {
-      shR = -0.9 - sw * 0.05;
+      shR = -0.9 - swArm * 0.05;
       elR = 1.0;
     } else if (holdingUp) {
       // Lit: the arm straightens further and pushes the beam ahead
-      shR = -1.45 - sw * 0.04;
+      shR = -1.45 - swArm * 0.04;
       elR = 0.05;
     } else if (sneaking) {
       // Crouched and tucked in, but still aimed where he is going
-      shR = -1.05 - sw * armSwing * 0.12;
+      shR = -1.05 - swArm * armSwing * 0.12;
       elR = 0.22;
     }
 
@@ -753,9 +815,33 @@ export class Theo {
     // +rotation.x pitches him along his own forward axis, whichever way he faces
     const leanFromSpeed = (this.vx * this.facing) / SPEED_RUN;
     const targetPitch = leanFromSpeed * 0.26 + (sneaking ? 0.34 : 0);
-    this.hipRoot.rotation.x = THREE.MathUtils.damp(this.hipRoot.rotation.x, targetPitch, 7, dt);
-    // Shoulders counter-rotate against the hips as he walks
-    this.hipRoot.rotation.y = THREE.MathUtils.damp(this.hipRoot.rotation.y, -sw * stride * 0.22, 10, dt);
+
+    // The lean is split across two joints instead of pitching him as one
+    // rigid plank: the pelvis takes a little, the spine takes the rest, and
+    // the total is what it always was — just curved.
+    this.hipRoot.rotation.x = THREE.MathUtils.damp(this.hipRoot.rotation.x, targetPitch * 0.45, 7, dt);
+    this.chest.rotation.x = THREE.MathUtils.damp(this.chest.rotation.x, targetPitch * 0.6, 6, dt);
+
+    // Real counter-rotation: the pelvis twists WITH the leading leg and the
+    // shoulders swing against it. Previously both lived on one bone, so the
+    // whole upper body twisted as a unit and nothing actually opposed anything.
+    this.hipRoot.rotation.y = THREE.MathUtils.damp(this.hipRoot.rotation.y, sw * stride * 0.1, 10, dt);
+    this.chest.rotation.y = THREE.MathUtils.damp(this.chest.rotation.y, -sw * stride * 0.34, 9, dt);
+
+    // Pelvic list — the hip drops toward the swinging leg as weight transfers
+    // onto the stance foot. This is the cue that reads as *weight*, and its
+    // absence is why an otherwise correct walk cycle still looks weightless.
+    // Standing still he shifts his balance slowly from foot to foot rather
+    // than freezing solid.
+    const idleSway = moving ? 0 : Math.sin(this.idleT * 0.65) * 0.035;
+    this.hipRoot.rotation.z = THREE.MathUtils.damp(
+      this.hipRoot.rotation.z, sw * stride * 0.14 + idleSway, 9, dt
+    );
+    // The spine lags the pelvis and bends back the other way, so his outline
+    // is an S while he walks instead of a straight line.
+    this.chest.rotation.z = THREE.MathUtils.damp(
+      this.chest.rotation.z, Math.sin(p - 0.7) * stride * -0.1 - idleSway * 0.6, 7, dt
+    );
     this.torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 0.5);
 
     // ── Vertical: footfall bob, crouch drop, weight settling ──
@@ -771,16 +857,29 @@ export class Theo {
     // ── Head: leads the turn, counter-bobs, glances down when sneaking ──
     this.idleT += dt;
     const idleGlance = moving ? 0 : Math.sin(this.idleT * 0.5) * 0.12;
+    // He keeps his eyes up as the spine curves under him, so the head has to
+    // undo the sum of both joints rather than just the pelvis.
+    const spinePitch = this.hipRoot.rotation.x + this.chest.rotation.x;
     this.neck.rotation.x = THREE.MathUtils.damp(
       this.neck.rotation.x,
-      -this.hipRoot.rotation.x * 0.55 + (sneaking ? 0.12 : 0) + Math.sin(p * 2) * 0.02 * gait,
-      8,
+      -spinePitch * 0.62 + (sneaking ? 0.12 : 0) + Math.sin(p * 2) * 0.02 * gait,
+      // Slower than the body, so the head settles a beat late instead of
+      // locking to the shoulders
+      6.5,
       dt
     );
     this.neck.rotation.y = THREE.MathUtils.damp(
       this.neck.rotation.y,
-      idleGlance - this.hipRoot.rotation.y * 0.6,
-      6,
+      idleGlance - this.chest.rotation.y * 0.7,
+      5,
+      dt
+    );
+    // A small permanent tilt. Perfect symmetry is what makes a rig read as a
+    // mannequin, and a child listening to a house holds their head slightly off.
+    this.neck.rotation.z = THREE.MathUtils.damp(
+      this.neck.rotation.z,
+      -0.05 - clutch * 0.08 - this.chest.rotation.z * 0.5,
+      5,
       dt
     );
 
@@ -872,6 +971,9 @@ export class Theo {
     this.body.position.y = 0;
     this.body.rotation.set(0, 0, 0);
     this.hipRoot.rotation.set(0, 0, 0);
+    this.chest.rotation.set(0, 0, 0);
+    this.ankleL.rotation.set(0, 0, 0);
+    this.ankleR.rotation.set(0, 0, 0);
     this.neck.rotation.set(0, 0, 0);
     if (this.carried) this.drop();
   }
