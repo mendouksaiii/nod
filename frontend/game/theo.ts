@@ -113,7 +113,7 @@ export class Theo {
 
     // Kangaroo pocket — the small detail that makes it a hoodie and not a shirt
     const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.11, 0.09), hoodDark);
-    pocket.position.set(0.1, 0.06, 0);
+    pocket.position.set(0, 0.06, 0.1);
     pocket.castShadow = true;
 
     const collar = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), pajama);
@@ -125,14 +125,14 @@ export class Theo {
     // from it and swing when he runs.
     const hood = new THREE.Mesh(new THREE.SphereGeometry(0.185, 14, 12), hoodDark);
     hood.scale.set(0.82, 0.9, 1.0);
-    hood.position.set(-0.09, 0.36, 0);
+    hood.position.set(0, 0.36, -0.09);
     hood.castShadow = true;
     for (const sz of [0.05, -0.05]) {
       const string = new THREE.Mesh(
         new THREE.CapsuleGeometry(0.011, 0.12, 3, 6),
         new THREE.MeshStandardMaterial({ color: 0xbdb0a0, roughness: 1 })
       );
-      string.position.set(0.1, 0.27, sz);
+      string.position.set(sz, 0.27, 0.1);
       this.drawstrings.push(string);
     }
 
@@ -242,7 +242,7 @@ export class Theo {
       [this.hipL, this.kneeL, this.ankleL, 0.075],
       [this.hipR, this.kneeR, this.ankleR, -0.075],
     ] as const) {
-      hip.position.set(0, 0.44, z);
+      hip.position.set(z, 0.44, 0);
       const thigh = new THREE.Mesh(thighGeo, shorts);
       thigh.position.y = -0.11;
       thigh.castShadow = true;
@@ -256,7 +256,7 @@ export class Theo {
       // up onto the toes rather than spinning the shoe about its middle.
       ankle.position.y = -0.2;
       const foot = new THREE.Mesh(footGeo, skin);
-      foot.position.set(0.045, -0.01, 0);
+      foot.position.set(0, -0.01, 0.045);
       foot.castShadow = true;
       ankle.add(foot);
       knee.add(shin, ankle);
@@ -271,7 +271,7 @@ export class Theo {
       [this.shoulderL, this.elbowL, 0.15],
       [this.shoulderR, this.elbowR, -0.15],
     ] as const) {
-      sh.position.set(0, 0.31, z);
+      sh.position.set(z, 0.31, 0);
       const upper = new THREE.Mesh(upperGeo, pajama);
       upper.position.y = -0.095;
       upper.castShadow = true;
@@ -337,8 +337,11 @@ export class Theo {
       // Clear of the torso capsule (radius 0.165 about the body axis) and out
       // in the crook of the forward arm — sunk any closer and he reads as
       // holding nothing at all.
-      this.bear.position.set(-0.2, 0.1, 0.24);
-      this.bear.rotation.set(0.15, 0.5, -0.5);
+      // In the crook of the left arm and pulled across his chest, so it is
+      // held rather than floating beside him. These numbers were tuned against
+      // the old broken axes, where +X was mistakenly treated as his forward.
+      this.bear.position.set(0.08, 0.1, 0.2);
+      this.bear.rotation.set(0.12, -0.3, -0.45);
       this.bear.scale.setScalar(1.3);
       this.bear.visible = false; // until he picks it up off the pillow
       hipRoot.add(this.bear);
@@ -846,7 +849,7 @@ export class Theo {
     this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, 0.1 + clutch * 0.05, 7, dt);
     // Negative x sits it on the camera side of his body, so the raised torch
     // arm passes behind the bear instead of straight through it.
-    this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, -0.2 - clutch * 0.03, 7, dt);
+    this.bear.position.x = THREE.MathUtils.damp(this.bear.position.x, 0.08 - clutch * 0.03, 7, dt);
     this.bear.rotation.z = THREE.MathUtils.damp(
       this.bear.rotation.z, -0.55 - clutch * 0.25 + Math.sin(p) * stride * 0.06, 8, dt
     );
