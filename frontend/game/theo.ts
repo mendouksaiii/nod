@@ -165,18 +165,30 @@ export class Theo {
 
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x2b2320, roughness: 1 });
     // Cap of hair over the crown, pushed back off the forehead
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.222, 16, 12), hairMat);
-    cap.scale.set(0.99, 0.78, 1.0);
-    cap.position.set(0, 0.055, -0.022);
+    // A mop, not a skullcap — it comes down the sides of the head and sits
+    // over the ears, which is most of what makes the silhouette read as a
+    // small child rather than a doll with a painted-on scalp.
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.229, 16, 12), hairMat);
+    cap.scale.set(1.0, 0.9, 1.0);
+    cap.position.set(0, 0.035, -0.02);
     cap.castShadow = true;
     headGroup.add(cap);
-    // A fringe swept across the brow — stops above the eyes
-    const sweep = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), hairMat);
-    sweep.scale.set(0.92, 0.4, 0.72);
-    sweep.position.set(0.03, 0.115, 0.085);
-    sweep.rotation.z = -0.22;
+    // A heavy fringe across the brow, stopping just above the eyes
+    const sweep = new THREE.Mesh(new THREE.SphereGeometry(0.205, 14, 10), hairMat);
+    sweep.scale.set(0.97, 0.46, 0.8);
+    sweep.position.set(0.02, 0.095, 0.07);
+    sweep.rotation.z = -0.2;
     sweep.castShadow = true;
     headGroup.add(sweep);
+    // Locks hanging in front of each ear, so the hair has an outline instead
+    // of ending in a clean line at the temple
+    for (const sx of [0.152, -0.152]) {
+      const lock = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), hairMat);
+      lock.scale.set(0.62, 1.05, 0.9);
+      lock.position.set(sx, -0.01, 0.045);
+      lock.castShadow = true;
+      headGroup.add(lock);
+    }
     // Untidy tufts — nobody has brushed this child's hair in a while
     for (const [tx, ty, tz, ts] of [
       [-0.075, 0.155, -0.115, 0.8], [0.06, 0.165, -0.10, 0.65], [-0.015, 0.185, -0.03, 0.55],
@@ -266,10 +278,21 @@ export class Theo {
       sh.add(upper);
 
       el.position.y = -0.19;
-      const fore = new THREE.Mesh(foreGeo, skin);
+      // Sleeved to the wrist. A bare skin forearm was the palest thing on him
+      // and it sticks straight out toward the camera while he holds the torch,
+      // so it read as a length of pipe rather than an arm.
+      const fore = new THREE.Mesh(foreGeo, pajama);
       fore.position.y = -0.085;
       fore.castShadow = true;
-      el.add(fore);
+      const cuff = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.041, 0.039, 0.026, 10), hoodDark
+      );
+      cuff.position.y = -0.158;
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 7), skin);
+      hand.scale.set(0.85, 1, 0.9);
+      hand.position.y = -0.185;
+      hand.castShadow = true;
+      el.add(fore, cuff, hand);
       sh.add(el);
       this.chest.add(sh);
     }
@@ -321,26 +344,43 @@ export class Theo {
       hipRoot.add(this.bear);
     }
 
-    // Two-handed too-big flashlight, parented to the right forearm
+    // A flashlight, parented to the right forearm.
+    //
+    // This used to be 0.38 long — nearly a third of his height — and pale
+    // blue-grey, so from the side camera it read as a white pipe laid across
+    // his chest rather than a torch in his hand. It is still a bit big for
+    // him, because it is not his, but it is now a torch first.
+    const torchBody = new THREE.MeshStandardMaterial({
+      color: 0x1e2128, roughness: 0.55, metalness: 0.35,
+    });
     const torch = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06, 0.075, 0.38, 10),
-      new THREE.MeshStandardMaterial({ color: 0x3c414f, roughness: 0.9 })
+      new THREE.CylinderGeometry(0.038, 0.046, 0.185, 12),
+      torchBody
     );
+    // The bezel: a brass ring that catches his own glow and reads as the
+    // business end even when the torch is off.
+    const bezel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.052, 0.044, 0.038, 12),
+      new THREE.MeshStandardMaterial({ color: 0x6d5a34, roughness: 0.45, metalness: 0.6 })
+    );
+    bezel.position.set(0, -0.222, 0.01);
+    bezel.castShadow = true;
+    this.handAnchor.add(bezel);
     // Gripped so the barrel points along his forward axis — at rest it hangs
     // at his side, and when he raises it the beam goes where he is looking.
     // Along the forearm's own axis: hanging at his side it points at the
     // floor, and raising the arm swings the beam forward. (Aligning it to
     // the limb's +Z instead makes it rotate up across his chest.)
-    torch.position.set(0, -0.17, 0.01);
+    torch.position.set(0, -0.135, 0.01);
     torch.castShadow = true;
     // A lit lens on the front so the torch reads as a torch, not a pipe.
     // A sphere, not a disc — a disc goes edge-on and reads as a white bar
     // across his chest from the side camera.
     const lens = new THREE.Mesh(
-      new THREE.SphereGeometry(0.036, 8, 6),
+      new THREE.SphereGeometry(0.03, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xffe9b8 })
     );
-    lens.position.set(0, -0.37, 0.01);
+    lens.position.set(0, -0.238, 0.01);
     this.handAnchor.add(lens);
     this.torchLens = lens;
     this.handAnchor.position.y = -0.15;
@@ -763,19 +803,23 @@ export class Theo {
     // horizontal — not just the upper arm. Shoulder near -1.25rad with the
     // elbow almost straight puts the barrel out in front of him; anything
     // shallower and it quietly goes back to pointing at the floor.
-    let shR = -1.25 - swArm * armSwing * 0.14;
-    let elR = 0.12 + Math.max(0, -swArm) * 0.08;
+    // He carries it the way a child actually carries a torch — arm mostly
+    // down, elbow soft, the light out around waist height. Holding it level
+    // with the shoulder made him aim it like a pistol, and it is the wrist,
+    // not the shoulder, that keeps the barrel pointed where he is walking.
+    let shR = -0.82 - swArm * armSwing * 0.14;
+    let elR = 0.3 + Math.max(0, -swArm) * 0.08;
     if (carrying) {
       shR = -0.9 - swArm * 0.05;
       elR = 1.0;
     } else if (holdingUp) {
-      // Lit: the arm straightens further and pushes the beam ahead
-      shR = -1.45 - swArm * 0.04;
-      elR = 0.05;
-    } else if (sneaking) {
-      // Crouched and tucked in, but still aimed where he is going
-      shR = -1.05 - swArm * armSwing * 0.12;
+      // Lit: he brings it up a little and pushes the beam ahead
+      shR = -1.0 - swArm * 0.04;
       elR = 0.22;
+    } else if (sneaking) {
+      // Crouched, tucked in close to his body
+      shR = -0.72 - swArm * armSwing * 0.12;
+      elR = 0.36;
     }
 
     const armDamp = 9;
@@ -783,6 +827,16 @@ export class Theo {
     this.shoulderR.rotation.x = THREE.MathUtils.damp(this.shoulderR.rotation.x, shR, armDamp, dt);
     this.elbowL.rotation.x = THREE.MathUtils.damp(this.elbowL.rotation.x, elL, armDamp, dt);
     this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, elR, armDamp, dt);
+    // The wrist takes up whatever the arm does not, so the barrel stays level
+    // and aimed where he walks no matter how the arm is posed. The beam itself
+    // is aimed independently, so without this the mesh and the light disagree
+    // and the torch visibly points at the floor while lighting the corridor.
+    this.handAnchor.rotation.x = THREE.MathUtils.clamp(
+      -Math.PI / 2 - (this.shoulderR.rotation.x + this.elbowR.rotation.x),
+      -1.15, // a wrist, not a hinge
+      0.3
+    );
+
     // The bear-arm stays tucked in; the free arm hangs away from the body
     this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, -0.34 - clutch * 0.1, 8, dt);
     this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, sneaking ? 0.3 : 0.16, 8, dt);
