@@ -76,6 +76,8 @@ export interface Zone {
 }
 
 export interface FloorBuild {
+  /** How many taps are currently open. Drives the running-water bed. */
+  runningTaps?: number;
   floor: number;
   name: string;
   group: THREE.Group;

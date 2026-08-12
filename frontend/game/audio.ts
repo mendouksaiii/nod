@@ -88,6 +88,10 @@ export class NodAudio {
   private presencePan!: StereoPannerNode;
   private presenceOsc: OscillatorNode | null = null;
   private presenceNoiseGain!: GainNode;
+  /** Running water: a continuous bed that exists only while a tap is open. */
+  private waterGain!: GainNode;
+  private waterSrc: AudioBufferSourceNode | null = null;
+  private waterHi!: BiquadFilterNode;
 
   private floor = 7;
   private profile = PROFILES[7];
@@ -170,6 +174,18 @@ export class NodAudio {
     this.presenceNoiseGain = c.createGain();
     this.presenceNoiseGain.gain.value = 0;
     this.presenceNoiseGain.connect(this.presencePan);
+
+    // ── Running water ──
+    // Two bands of filtered noise: a low rush for the column of water and a
+    // bright band for it hitting the basin. Silent until a tap is opened.
+    this.waterGain = c.createGain();
+    this.waterGain.gain.value = 0;
+    this.waterGain.connect(this.ambience);
+    this.waterHi = c.createBiquadFilter();
+    this.waterHi.type = "bandpass";
+    this.waterHi.frequency.value = 2400;
+    this.waterHi.Q.value = 0.7;
+    this.waterHi.connect(this.waterGain);
 
     // ── The score ──
     // Everything above this line is diegetic: breath, footfall, the thing in
@@ -794,6 +810,76 @@ export class NodAudio {
     this.toneGain.gain.setTargetAtTime(0, t + 0.5, 0.15);
     this.scoreGain.gain.setTargetAtTime(0, t + 0.35, 0.1);
     this.presenceGain.gain.setTargetAtTime(0, t + 0.6, 0.2);
+  }
+
+  /**
+   * How many taps are open. Water is a continuous thing, so it gets a
+   * continuous voice rather than a one-shot — and it is the mechanic on the
+   * baths floor, so it has to be audible enough to aim with.
+   */
+  setRunningWater(n: number) {
+    if (!this.started) return;
+    const c = this.ctx!;
+    const t = this.now();
+    if (n > 0 && !this.waterSrc) {
+      const src = c.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const low = c.createBiquadFilter();
+      low.type = "lowpass";
+      low.frequency.value = 900;
+      low.Q.value = 0.4;
+      src.connect(low);
+      low.connect(this.waterGain);
+      src.connect(this.waterHi);
+      src.start();
+      this.waterSrc = src;
+    }
+    // Levels off rather than stacking — four taps is not four times as loud.
+    const target = n === 0 ? 0 : Math.min(0.14, 0.055 + n * 0.028);
+    this.waterGain.gain.setTargetAtTime(target, t, 0.35);
+    if (n === 0 && this.waterSrc) {
+      const dead = this.waterSrc;
+      this.waterSrc = null;
+      try { dead.stop(t + 1.2); } catch { /* already stopped */ }
+    }
+  }
+
+  /**
+   * Touching the house. Each kind of thing answers in its own material —
+   * a single generic click for every object in the game is why interacting
+   * felt like nothing was happening.
+   */
+  useTouch(tag = "") {
+    if (tag.startsWith("tap") || tag.includes("valve")) {
+      // Metal, stiff, turning
+      this.burst({ dur: 0.42, gain: 0.09, hz: 2600, hzEnd: 900, q: 5, attack: 0.02 });
+      this.tone({ hz: 190, hzEnd: 150, dur: 0.35, gain: 0.05, type: "square", attack: 0.01 });
+      return;
+    }
+    if (/drawer|door|lid|chest|cupboard|wardrobe/.test(tag)) {
+      // Dry wood dragging on wood
+      this.burst({ dur: 0.75, gain: 0.11, hz: 420, hzEnd: 240, q: 1.6, attack: 0.06 });
+      this.tone({ hz: 88, hzEnd: 64, dur: 0.6, gain: 0.05, attack: 0.04 });
+      return;
+    }
+    if (/glass|jar|bottle|mirror/.test(tag)) {
+      this.burst({ dur: 0.3, gain: 0.07, hz: 5200, hzEnd: 3400, q: 7, attack: 0.004 });
+      this.tone({ hz: 2650, dur: 0.5, gain: 0.03, type: "sine", attack: 0.004 });
+      return;
+    }
+    if (/cloth|bed|cover|curtain|sheet|rag/.test(tag)) {
+      this.burst({ dur: 0.55, gain: 0.07, hz: 1500, hzEnd: 700, q: 0.8, attack: 0.08 });
+      return;
+    }
+    if (/pipe|metal|rail|tin|pan/.test(tag)) {
+      this.burst({ dur: 0.6, gain: 0.09, hz: 3200, hzEnd: 1400, q: 4, attack: 0.004 });
+      this.tone({ hz: 620, hzEnd: 520, dur: 0.7, gain: 0.04, type: "triangle", attack: 0.004 });
+      return;
+    }
+    // Anything else: a soft knock on something solid, still a real sound
+    this.burst({ dur: 0.28, gain: 0.075, hz: 900, hzEnd: 380, q: 2.2, attack: 0.006 });
+    this.tone({ hz: 130, hzEnd: 96, dur: 0.32, gain: 0.045, attack: 0.006 });
   }
 
   keyTaken() {

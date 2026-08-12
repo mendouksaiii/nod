@@ -203,6 +203,7 @@ export class NodGame {
     });
 
     this.hasKey = false;
+    this.showKey(false);
     this.checkpointX = this.floor.spawnX;
     this.theo.respawn(this.floor.spawnX);
     this.audio.setFloor(n);
@@ -378,6 +379,21 @@ export class NodGame {
       "A / D  move      Shift  run      C  sneak      E  interact      Q  throw      F  flashlight";
     setTimeout(() => (hint.style.opacity = "0"), 9000);
 
+    // The key, once he has it. Right-hand side, opposite the battery, so the
+    // two things you own are not competing for the same corner.
+    const keyTag = mk({
+      right: "24px", bottom: "30px", display: "flex", alignItems: "center",
+      gap: "0.5rem", opacity: "0", transition: "opacity 0.6s",
+      fontSize: "10.5px", letterSpacing: "0.18em", textTransform: "uppercase",
+      fontFamily: "ui-monospace, monospace", color: "#c9b27a",
+    });
+    keyTag.innerHTML =
+      '<svg width="26" height="12" viewBox="0 0 26 12" fill="none" aria-hidden="true">' +
+      '<circle cx="5" cy="6" r="3.6" stroke="#c9b27a" stroke-width="1.5"/>' +
+      '<path d="M8.6 6H24" stroke="#c9b27a" stroke-width="1.5"/>' +
+      '<path d="M20 6v3.4M23 6v2.4" stroke="#c9b27a" stroke-width="1.5"/>' +
+      "</svg><span>key</span>";
+
     // The jump scare flash. Full-bleed, sits above everything, and is only
     // ever visible for about two frames.
     const scare = mk({
@@ -386,7 +402,12 @@ export class NodGame {
       opacity: "0", mixBlendMode: "screen",
     });
 
-    return { battery: battery as HTMLDivElement, torchTag, prompt, hint, vignette, blackout, card, sub, grade, page, scare };
+    return { battery: battery as HTMLDivElement, torchTag, prompt, hint, vignette, blackout, card, sub, grade, page, scare, keyTag };
+  }
+
+  /** The key indicator. Fades rather than snapping, and clears per floor. */
+  private showKey(has: boolean) {
+    this.hud.keyTag.style.opacity = has ? "0.75" : "0";
   }
 
   private showCard(text: string, subtext = "", hold = 2600) {
@@ -479,11 +500,18 @@ export class NodGame {
           this.audio.keyTaken();
           break;
         }
-        this.theo.pickUp(it);
         if (it.isKey) {
+          // A key is not cargo. It goes in his pocket and shows on the HUD:
+          // carrying it in his hand meant the one free hand was permanently
+          // occupied, so he could not pick anything else up for the rest of
+          // the floor, and the key itself was hidden behind the torch.
           this.hasKey = true;
+          it.consumed = true;
+          it.mesh?.parent?.remove(it.mesh);
           this.audio.keyTaken();
+          this.showKey(true);
         } else {
+          this.theo.pickUp(it);
           this.audio.pickup();
         }
         break;
@@ -540,7 +568,12 @@ export class NodGame {
         this.floor.noise = Math.max(this.floor.noise ?? 0, n);
         this.decoy = { x: c.x, strength: n };
         this.decoyT = it.sustain ?? 0.9;
-        this.audio.pickup();
+        // Answer in the material of the thing he touched, not one generic
+        // click for every object in the house.
+        this.audio.useTouch(it.tag ?? "");
+        // Anything that changed the room may have changed how much water is
+        // running, and running water is a continuous sound, not a one-shot.
+        this.audio.setRunningWater(this.floor.runningTaps ?? 0);
         if (!it.repeatable) it.consumed = true;
         break;
       }
@@ -574,7 +607,6 @@ export class NodGame {
       t.getSize(size);
       t.setFromCenterAndSize(new THREE.Vector3(landX, size.y / 2, held.mesh.position.z), size);
     }
-    if (held.isKey) this.hasKey = false;
     if (held.tag === "throwable") {
       this.decoy = { x: landX, strength: 1 };
       this.decoyT = 0.9;

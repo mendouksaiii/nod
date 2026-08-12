@@ -113,21 +113,45 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
     );
     spout.position.set(sx, 3.7, -3.3);
     group.add(spout);
+    // The column has to reach the basin. It used to stop 3m above the floor,
+    // which meant turning the tap on produced a short glowing stick over the
+    // player's head that read as nothing at all.
     const stream = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.035, 0.045, 1.05, 6),
+      new THREE.CylinderGeometry(0.03, 0.055, 2.6, 8),
       new THREE.MeshStandardMaterial({
-        color: 0x9fc4cc, emissive: 0x3f6b75, emissiveIntensity: 0.9,
-        transparent: true, opacity: 0.55, roughness: 0.1,
+        color: 0xa8ccd6, emissive: 0x4a7d88, emissiveIntensity: 1.2,
+        transparent: true, opacity: 0.42, roughness: 0.05,
       })
     );
-    stream.position.set(sx, 2.95, -3.3);
+    stream.position.set(sx, 2.15, -3.3);
     stream.visible = false;
     group.add(stream);
     const t = { x: sx, on: false, stream };
     taps.push(t);
+    // Splash where it lands, so the water reads as hitting something
+    const splash = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.1, 0.1, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xa8ccd6, emissive: 0x4a7d88, emissiveIntensity: 0.8,
+        transparent: true, opacity: 0.3,
+      })
+    );
+    splash.position.set(sx, 0.9, -3.3);
+    splash.visible = false;
+    group.add(splash);
+
     usable(interactables, sx, 1.6, -1.9, "turn the tap on", 0.45, {
       tag: `tap${i}`, sustain: 1.2, hw: 1.4, hh: 1.9,
-      onUse: () => { t.on = !t.on; stream.visible = t.on; },
+      onUse: (b) => {
+        t.on = !t.on;
+        stream.visible = t.on;
+        splash.visible = t.on;
+        // The label has to tell the truth about what E will do next —
+        // it always said "turn the tap on", including when it was on.
+        const me = b.interactables.find((q) => q.tag === `tap${i}`);
+        if (me) me.label = t.on ? "turn the tap off" : "turn the tap on";
+        b.runningTaps = taps.filter((q) => q.on).length;
+      },
     });
   }
 

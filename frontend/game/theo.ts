@@ -344,11 +344,11 @@ export class Theo {
       // that was supposedly holding it, so the arm moved and the bear did not.
       // Attached to the elbow it is carried — the clutch comes from the arm
       // pose, and the bear simply goes where the arm goes.
-      this.bear.position.set(-0.075, -0.145, 0.055);
-      this.bear.rotation.set(0.1, -0.2, -1.15);
+      this.bear.position.set(0.075, -0.145, 0.055);
+      this.bear.rotation.set(0.1, 0.2, 1.15);
       this.bear.scale.setScalar(1.3);
       this.bear.visible = false; // until he picks it up off the pillow
-      this.elbowR.add(this.bear);
+      this.elbowL.add(this.bear);
     }
 
     // A flashlight, parented to the right forearm.
@@ -392,7 +392,7 @@ export class Theo {
     this.torchLens = lens;
     this.handAnchor.position.y = -0.15;
     this.handAnchor.add(torch);
-    this.elbowL.add(this.handAnchor);
+    this.elbowR.add(this.handAnchor);
 
     this.root.add(this.body);
     this.root.position.set(-2, 0, 0);
@@ -836,26 +836,26 @@ export class Theo {
       elTorch = 0.36;
     }
 
-    // Torch in the LEFT hand, bear in the RIGHT.
+    // Torch in the RIGHT hand, bear in the LEFT.
     const armDamp = 9;
-    this.shoulderL.rotation.x = THREE.MathUtils.damp(this.shoulderL.rotation.x, shTorch, armDamp, dt);
-    this.shoulderR.rotation.x = THREE.MathUtils.damp(this.shoulderR.rotation.x, shBear, armDamp, dt);
-    this.elbowL.rotation.x = THREE.MathUtils.damp(this.elbowL.rotation.x, elTorch, armDamp, dt);
-    this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, elBear, armDamp, dt);
+    this.shoulderL.rotation.x = THREE.MathUtils.damp(this.shoulderL.rotation.x, shBear, armDamp, dt);
+    this.shoulderR.rotation.x = THREE.MathUtils.damp(this.shoulderR.rotation.x, shTorch, armDamp, dt);
+    this.elbowL.rotation.x = THREE.MathUtils.damp(this.elbowL.rotation.x, elBear, armDamp, dt);
+    this.elbowR.rotation.x = THREE.MathUtils.damp(this.elbowR.rotation.x, elTorch, armDamp, dt);
     // The wrist takes up whatever the arm does not, so the barrel stays level
     // and aimed where he walks no matter how the arm is posed. The beam itself
     // is aimed independently, so without this the mesh and the light disagree
     // and the torch visibly points at the floor while lighting the corridor.
     this.handAnchor.rotation.x = THREE.MathUtils.clamp(
-      -Math.PI / 2 - (this.shoulderL.rotation.x + this.elbowL.rotation.x),
+      -Math.PI / 2 - (this.shoulderR.rotation.x + this.elbowR.rotation.x),
       -1.15, // a wrist, not a hinge
       0.3
     );
 
     // The bear-arm stays tucked in; the free arm hangs away from the body
-    // Elbow tucked IN against his side rather than winged out
-    this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, 0.14 + clutch * 0.06, 8, dt);
-    this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, sneaking ? -0.3 : -0.16, 8, dt);
+    // Bear elbow tucked IN against his side rather than winged out
+    this.shoulderL.rotation.z = THREE.MathUtils.damp(this.shoulderL.rotation.z, -0.14 - clutch * 0.06, 8, dt);
+    this.shoulderR.rotation.z = THREE.MathUtils.damp(this.shoulderR.rotation.z, sneaking ? 0.3 : 0.16, 8, dt);
 
     // Bear: the arm carries it now, so almost nothing is driven here. What
     // remains is the squeeze — as the dread rises he pulls it a little tighter
@@ -865,7 +865,7 @@ export class Theo {
     this.bear.position.z = THREE.MathUtils.damp(this.bear.position.z, 0.055 - clutch * 0.02, 6, dt);
     this.bear.position.y = THREE.MathUtils.damp(this.bear.position.y, -0.145 + clutch * 0.015, 6, dt);
     this.bear.rotation.z = THREE.MathUtils.damp(
-      this.bear.rotation.z, -1.15 - clutch * 0.1, 7, dt
+      this.bear.rotation.z, 1.15 + clutch * 0.1, 7, dt
     );
 
     // The lens is only lit when the torch is, and the torch throws a little

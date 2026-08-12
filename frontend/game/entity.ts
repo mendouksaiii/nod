@@ -127,6 +127,10 @@ export class Entity {
   /** Where on a wall or ceiling it currently is: 0 = floor, 1 = ceiling. */
   private climb = 0;
   private climbTarget = 0;
+  /** Reused so the walk test allocates nothing per frame. */
+  private probe = new THREE.Box3();
+  /** How long it has been unable to make progress. Guards against deadlock. */
+  private stuckT = 0;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -730,11 +734,37 @@ export class Entity {
     // It will not cross into the rooms it is afraid of
     const lo = Math.max(bounds.minX, this.spec.safeBelow);
     const hi = Math.min(bounds.maxX, this.spec.safeAbove);
-    this.root.position.x = THREE.MathUtils.clamp(
-      this.root.position.x + this.vx * dt,
-      lo,
-      hi
-    );
+    let nextX = THREE.MathUtils.clamp(this.root.position.x + this.vx * dt, lo, hi);
+
+    // It used to integrate straight through furniture, dividers and walls,
+    // which is most of why it read as a sprite sliding over the level rather
+    // than a body in the room. Only tested while it is on the floor — once it
+    // is up a wall it is meant to pass over everything.
+    // Only blocks when it would walk INTO something from a clear spot. If it
+    // is already overlapping geometry — several wardens spawn inside the bath
+    // or under a shelf — it must be free to walk out, or it is frozen for the
+    // whole floor. Tested only while on the ground; up a wall it passes over
+    // everything, which is the point of climbing.
+    const insideAlready = this.climb < 0.2 && this.blockedAt(this.root.position.x, colliders);
+    if (this.climb < 0.2 && !insideAlready && this.blockedAt(nextX, colliders)) {
+      nextX = this.root.position.x;
+      this.stuckT += dt;
+      if (this.state === "hunt" || this.state === "search") {
+        // It does not stop because a dresser is in the way. It goes over.
+        if (CAN_CLIMB.has(this.sense)) {
+          this.climbTarget = Math.max(this.climbTarget, 0.45);
+        }
+      } else if (this.stuckT > 0.35) {
+        // Patrolling into something it cannot pass: turn round rather than
+        // grind against it forever.
+        this.wpIndex = (this.wpIndex + 1) % this.waypoints.length;
+        this.stuckT = 0;
+      }
+      this.vx = 0;
+    } else {
+      this.stuckT = 0;
+    }
+    this.root.position.x = nextX;
     if (Math.abs(this.vx) > 0.05) this.facing = Math.sign(this.vx);
 
     // Leaving the floor. It goes up the wall backwards, and it does not
@@ -776,6 +806,23 @@ export class Entity {
           Math.abs(a.x - this.lastSeenX) - Math.abs(b.x - this.lastSeenX)
       )
       .slice(0, prof.places);
+  }
+
+  /**
+   * Can it stand here, or is there furniture in the way?
+   *
+   * Deliberately a narrow box around its shins rather than its whole body: the
+   * dividers between rooms have a child-height doorway punched in them, and
+   * testing the full height would wall the warden into a single room for the
+   * entire floor.
+   */
+  private blockedAt(x: number, colliders: THREE.Box3[]): boolean {
+    this.probe.min.set(x - 0.4, 0.3, -0.85);
+    this.probe.max.set(x + 0.4, 1.25, 0.85);
+    for (const b of colliders) {
+      if (b.intersectsBox(this.probe)) return true;
+    }
+    return false;
   }
 
   private patrol(dt: number) {
