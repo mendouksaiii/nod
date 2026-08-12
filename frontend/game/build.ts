@@ -399,9 +399,19 @@ export function crayonDrawing(
  * from wherever it rests forward to the lane the boy actually walks in.
  */
 export function keyTrigger(x: number, y: number, z: number, hw = 1.2): THREE.Box3 {
-  const topY = Math.max(y + 0.7, 1.6);
+  // It reaches DOWN only as far as the surface the key is resting on — a
+  // child's reach, not the height of the room. Spanning all the way to the
+  // ground fixed the unreachable case but broke the opposite one: a key left
+  // on top of a 6.6m stack of crates, or along the rail of the cot, could be
+  // taken from the floor below, skipping the climb the placement exists for.
+  // 2.0 rather than a tighter number because a key can sit a shelf above the
+  // highest rung — on the pantry ladder the top rung is 5.65 and the key is at
+  // 7.65, which put the probe exactly ON the boundary at 1.5 and would have
+  // depended on floating point for whether the floor was completable.
+  const standY = Math.max(0, y - 2.0);
+  const topY = Math.max(y + 0.7, standY + 1.6);
   return new THREE.Box3(
-    new THREE.Vector3(x - hw, 0, Math.min(z - 0.9, -1.2)),
+    new THREE.Vector3(x - hw, standY, Math.min(z - 0.9, -1.2)),
     new THREE.Vector3(x + hw, topY, Math.max(z + 0.9, 0.9))
   );
 }
