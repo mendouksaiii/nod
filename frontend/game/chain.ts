@@ -17,33 +17,6 @@ export interface Mark {
   at: number;
   /** Decrypted phrase index, or null if the house would not show us. */
   phrase: number | null;
-  /** What they called themselves, or null if we have not got that deep. */
-  name: string | null;
-}
-
-/**
- * A name packed big-endian into the low bytes of a uint256.
- *
- * 31 characters rather than 32 so the top byte is always zero and the value
- * can never be mistaken for a handle. Non-ASCII is dropped rather than
- * truncated mid-codepoint, because half a character on a memorial wall is
- * worse than a missing one.
- */
-export function packName(name: string): bigint {
-  const clean = name.replace(/[^ -~]/g, "").trim().slice(0, 31);
-  let v = 0n;
-  for (const ch of clean) v = (v << 8n) | BigInt(ch.charCodeAt(0) & 0xff);
-  return v;
-}
-
-export function unpackName(packed: bigint): string {
-  let v = packed;
-  const chars: string[] = [];
-  while (v > 0n) {
-    chars.unshift(String.fromCharCode(Number(v & 0xffn)));
-    v >>= 8n;
-  }
-  return chars.join("").trim();
 }
 
 export interface RunState {
@@ -135,26 +108,8 @@ export class HouseLink {
   // ── The four moments ────────────────────────────────────────────────
 
   /** "The house learns your name." */
-  /**
-   * Walk in, and tell the house what to call you.
-   *
-   * The name goes in ENCRYPTED, under the same access rule as your last words:
-   * granted to you, and afterwards to anyone who reaches the floor where you
-   * stopped. An address is public forever and says nothing about a child. A
-   * name is the part that makes a mark on the wall land — so the name is the
-   * secret, and the only way to learn one is to get as deep as they did.
-   *
-   * Packed big-endian into the low bytes of a uint256, so up to 31 characters
-   * survive the round trip. Empty is allowed; the house just never learns it.
-   */
-  async enterHouse(name = "") {
-    const zap = await this.inco();
-    const enc = await zap.encrypt(packName(name), {
-      accountAddress: this.account,
-      dappAddress: HOUSE_ADDRESS,
-      handleType: (await import("@inco/lightning-js")).handleTypes.euint256,
-    });
-    await this.write("enterHouse", [enc], await this.fee());
+  async enterHouse() {
+    await this.write("enterHouse", [], await this.fee());
   }
 
   /** Go down. Mints the floor below and hands over its walls. */
@@ -198,23 +153,18 @@ export class HouseLink {
 
   /** Who the house kept on this floor, and what they left — if we may read it. */
   async marksOn(floor: number): Promise<Mark[]> {
-    const [children, times, epitaphs, names] = (await this.read("marksOn", [floor])) as [
+    const [children, times, epitaphs] = (await this.read("marksOn", [floor])) as [
       Address[],
       bigint[],
-      (bigint | string)[],
       (bigint | string)[]
     ];
     const out: Mark[] = [];
     for (let i = 0; i < children.length; i++) {
       const phrase = await this.tryDecrypt(epitaphs[i]);
-      // Null here is the normal case, not an error: it means the house has
-      // not granted us this child's name because we have not got that far.
-      const packed = await this.tryDecrypt(names[i]);
       out.push({
         child: children[i],
         at: Number(times[i]),
         phrase: phrase === null ? null : Number(phrase),
-        name: packed === null ? null : unpackName(packed),
       });
     }
     return out;

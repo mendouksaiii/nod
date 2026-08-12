@@ -15,11 +15,11 @@ import { FOUND_TEXT, WREN_PAGES } from "./build";
  */
 export interface HouseBridge {
   floorSeed(floor: number): Promise<bigint | null>;
-  enterHouse(name: string): Promise<void>;
+  enterHouse(): Promise<void>;
   descend(from: number): Promise<void>;
   fallToNod(phraseIndex: number, settled: boolean): Promise<void>;
   reachTheDoor(): Promise<string>;
-  marksOn(floor: number): Promise<{ child: string; at: number; phrase: number | null; name: string | null }[]>;
+  marksOn(floor: number): Promise<{ child: string; at: number; phrase: number | null }[]>;
   phrases(): Promise<string[]>;
 }
 
@@ -251,14 +251,6 @@ export class NodGame {
         shoe.position.set(x, 0.065, -3.9 + dz);
         shoe.castShadow = true;
         group.add(shoe);
-      }
-      // Their name, if the house will let us read it. It is granted only to
-      // someone standing on the floor where that child stopped, so on floor
-      // seven these are mostly blanks — and getting deeper is what fills them
-      // in. A name you had to earn reads very differently from a name on a
-      // list.
-      if (m.name) {
-        writing(group, m.name, x, 1.15, 1.5, "#b9ae94");
       }
       // What they left, if the house will let us read it
       if (m.phrase !== null && this.phraseList[m.phrase] && shown < 3) {
@@ -902,7 +894,7 @@ export class NodGame {
     this.busyWithChain = true;
     this.showCard("waking", "the house learns your name…", 0);
     try {
-      await this.bridge.enterHouse(this.playerName);
+      await this.bridge.enterHouse();
       await this.loadFloor(TOP_FLOOR);
       this.runOver = false;
       this.dying = false;

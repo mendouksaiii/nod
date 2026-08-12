@@ -55,21 +55,9 @@ contract NodHouse is Ownable2Step {
         uint64 at;
         uint8 floor;
         euint256 epitaph;
-        /**
-         * What the child called themselves, encrypted.
-         *
-         * It lives under exactly the same rule as the epitaph: granted only to
-         * someone who reaches the floor where this child stopped. An address is
-         * public forever and tells you nothing; a name is the thing that makes
-         * a mark on the wall land. So the name is the secret, and the only way
-         * to learn it is to get as deep as they did.
-         */
-        euint256 name;
     }
 
     mapping(address => Run) public runs;
-    /// child => the name they gave the house, encrypted
-    mapping(address => euint256) private _nameOf;
     /// child => floor => that floor's encrypted layout seed
     mapping(address => mapping(uint8 => euint256)) private _floorSeed;
     /// floor => ring of the last MARKS_PER_FLOOR children kept there
@@ -194,19 +182,9 @@ contract NodHouse is Ownable2Step {
      * @dev Mints only floor 7's seed. The floors below do not exist for you
      *      yet, in the strongest sense available: they have not been created.
      */
-    /**
-     * @param encryptedName The name you give the house, encrypted client-side.
-     *        Held for the length of the run and copied onto your mark if you
-     *        are kept. Never granted to anyone but you until then.
-     */
-    function enterHouse(bytes calldata encryptedName) external payable {
+    function enterHouse() external payable {
         if (!sealed_) revert NotSealed();
         _requireFee();
-
-        euint256 given = e.newEuint256(encryptedName, msg.sender);
-        e.allowThis(given);
-        e.allow(given, msg.sender); // you can always read your own name
-        _nameOf[msg.sender] = given;
 
         runs[msg.sender] = Run({
             active: true,
@@ -270,8 +248,7 @@ contract NodHouse is Ownable2Step {
             child: msg.sender,
             at: uint64(block.timestamp),
             floor: floor,
-            epitaph: epitaph,
-            name: _nameOf[msg.sender]
+            epitaph: epitaph
         });
         _markCursor[floor] = (slot + 1) % MARKS_PER_FLOOR;
         markTotal[floor]++;
@@ -320,11 +297,6 @@ contract NodHouse is Ownable2Step {
             if (euint256.unwrap(ep) != 0) {
                 e.allow(ep, msg.sender);
             }
-            // The name is granted on the same terms as the last words.
-            euint256 nm = ring[i].name;
-            if (euint256.unwrap(nm) != 0) {
-                e.allow(nm, msg.sender);
-            }
         }
     }
 
@@ -345,12 +317,7 @@ contract NodHouse is Ownable2Step {
     function marksOn(uint8 floor)
         external
         view
-        returns (
-            address[] memory children,
-            uint64[] memory times,
-            euint256[] memory epitaphs,
-            euint256[] memory names
-        )
+        returns (address[] memory children, uint64[] memory times, euint256[] memory epitaphs)
     {
         Mark[8] storage ring = _marks[floor];
         uint8 n = 0;
@@ -361,7 +328,6 @@ contract NodHouse is Ownable2Step {
         children = new address[](n);
         times = new uint64[](n);
         epitaphs = new euint256[](n);
-        names = new euint256[](n);
 
         uint8 j = 0;
         for (uint8 i = 0; i < MARKS_PER_FLOOR; i++) {
@@ -369,7 +335,6 @@ contract NodHouse is Ownable2Step {
             children[j] = ring[i].child;
             times[j] = ring[i].at;
             epitaphs[j] = ring[i].epitaph;
-            names[j] = ring[i].name;
             j++;
         }
     }
