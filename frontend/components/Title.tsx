@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { activeChain } from "@/lib/network";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
+import Backdrop from "./Backdrop";
 
 type Phase = "title" | "connecting" | "waking" | "verified" | "playing" | "error";
 
@@ -18,7 +19,6 @@ const shell: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   gap: "1.1rem",
-  background: "#07090d",
   color: "#9aa2b5",
   fontFamily: "Georgia, serif",
   textAlign: "center",
@@ -344,7 +344,9 @@ export default function Title() {
   }
 
   return (
-    <main style={shell}>
+    <>
+      <Backdrop />
+      <main style={{ ...shell, position: "fixed", zIndex: 1 }}>
       <h1 style={{ fontWeight: 400, letterSpacing: "0.55em", fontSize: "2.2rem", margin: 0 }}>
         N O D
       </h1>
@@ -507,6 +509,7 @@ export default function Title() {
           </button>
         </>
       )}
-    </main>
+      </main>
+    </>
   );
 }
