@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 /**
  * The house, seen from the field.
  *
@@ -70,6 +72,36 @@ function Grass({
 }
 
 export default function Backdrop() {
+  // Visible by DEFAULT, hidden only if the file genuinely fails.
+  //
+  // The first version faded in on canplay, and a cached video was routinely
+  // ready before React attached the handler — so the event never arrived and
+  // the clip played at opacity 0, perfectly and invisibly, behind everything.
+  // Starting visible removes that race: the poster frame covers the decode
+  // window, and the drawn scene is revealed only on a real error.
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    // Do NOT rely on onCanPlay alone. A cached video is often already ready
+    // before React attaches the handler, so the event never arrives and the
+    // clip plays at opacity 0 behind everything — playing perfectly and
+    // completely invisible. Check the state we already have, then listen.
+    // Muted autoplay is allowed nearly everywhere, but where it is refused the
+    // poster frame stays up as a still — the same house, not a black box — and
+    // the first gesture anywhere on the page starts it.
+    const tryPlay = () => void el.play().catch(() => { /* poster stands in */ });
+    tryPlay();
+    window.addEventListener("pointerdown", tryPlay, { once: true });
+    window.addEventListener("keydown", tryPlay, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", tryPlay);
+      window.removeEventListener("keydown", tryPlay);
+    };
+  }, []);
+
   return (
     <div
       aria-hidden="true"
@@ -124,8 +156,42 @@ export default function Backdrop() {
         @media (prefers-reduced-motion: reduce) {
           .nod-sway-a, .nod-sway-b, .nod-sway-c,
           .nod-fog, .nod-fog-b, .nod-win, .nod-win-b { animation: none; }
+          /* A looping video is motion too. Fall back to the still drawing. */
+          .nod-video { display: none; }
         }
       `}</style>
+
+      {/*
+        The filmed house. It sits ON TOP of the drawn scene rather than
+        replacing it, so the SVG is what you look at while this downloads,
+        if it fails to decode, or if autoplay is refused — there is never a
+        black rectangle where the background should be.
+      */}
+      <video
+        ref={videoRef}
+        src="/video/house.mp4"
+        poster="/video/house-poster.jpg"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        onError={() => setVideoFailed(true)}
+        className="nod-video"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          opacity: videoFailed ? 0 : 1,
+          transition: "opacity 0.8s ease",
+          // The drawn scene is authored AFTER this in the DOM so it can act as
+          // the fallback, which means its opaque sky would otherwise paint
+          // straight over the film. Lift the video above it explicitly.
+          zIndex: 1,
+        }}
+      />
 
       <svg
         viewBox="0 0 1000 560"
@@ -251,6 +317,7 @@ export default function Backdrop() {
         style={{
           position: "absolute",
           inset: 0,
+          zIndex: 2, // above both the film and the drawing
           background:
             "radial-gradient(ellipse at 50% 46%, rgba(5,7,11,0.10) 0%, rgba(5,7,11,0.42) 52%, rgba(3,5,8,0.88) 100%)",
         }}
