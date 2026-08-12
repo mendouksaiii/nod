@@ -168,8 +168,9 @@ export class Entity {
   /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
   private crouch = 0;
   /** How far the hips drop in a full crouch, so the feet stay on the floor. */
-  // Measured, not guessed: at 0.5 the sole finished 0.051 below the boards.
-  private crouchDrop = 0.45;
+  // He stays on his feet now, so the drop is only the small amount the softened
+  // knees actually lose. Measured against the sole, not guessed.
+  private crouchDrop = 0.12;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -239,7 +240,7 @@ export class Entity {
     );
     hips.position.y = 0;
     hips.castShadow = true;
-    this.root.add(hips);
+    this.waist.add(hips);
 
     // The head kept its child size. Nothing else did.
     this.neck.position.y = P.headY - P.hipY;
@@ -262,14 +263,14 @@ export class Entity {
         rib.rotation.z = Math.PI * 0.42;
         rib.position.y = P.torsoL * (0.35 + i * 0.19);
         rib.castShadow = true;
-        this.root.add(rib);
+        this.waist.add(rib);
       }
       // A spine that has come loose of the back
       for (let i = 0; i < 6; i++) {
         const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 5), pale);
         knuckle.position.set(-P.torsoR * 0.85, P.torsoL * (0.3 + i * 0.16), 0);
         knuckle.scale.set(0.8, 1, 1.4);
-        this.root.add(knuckle);
+        this.waist.add(knuckle);
       }
     }
 
@@ -1110,32 +1111,39 @@ export class Entity {
     this.armR.rotation.x = -sw * stride * 0.55 * up;
 
     // ── Folded over ──
-    // Only the Crying Man does this, and it is the whole read of him from
-    // across the room: a shape on the floor, not a figure walking about.
-    //
-    // The first version rotated the TORSO, which is a capsule parented to the
-    // root at chest height — so it spun about its own middle, the bottom
-    // swinging backwards while the top went forwards. And it rotated rigid
-    // pole legs with no knee while sinking the whole body 0.62 into the
-    // boards. It now bends at a real waist and folds at real knees.
+    // Not a crouch. He is on his feet, bent right down over himself with both
+    // arms wrapped up over his head — the shape a child makes when it wants to
+    // stop being looked at. Reads at a distance as a wrong angle in the room
+    // rather than as a figure standing about.
     if (this.sense === "sight") {
       const want = this.state === "patrol" ? 1
         : this.state === "alert" ? 1 - Math.min(1, this.noticeT / 1.15) : 0;
       this.crouch = THREE.MathUtils.damp(this.crouch, want, 4.5, dt);
       const k = this.crouch;
 
-      // Down onto his heels: thighs forward, shins folded back under him.
-      this.legL.rotation.x = 0.85 * k;
-      this.legR.rotation.x = 0.8 * k;
-      this.kneeL.rotation.x = -1.7 * k;
-      this.kneeR.rotation.x = -1.62 * k;
+      // Standing, knees only softened — the fold is at the waist, not the legs.
+      this.legL.rotation.x = 0.22 * k;
+      this.legR.rotation.x = 0.18 * k;
+      this.kneeL.rotation.x = -0.42 * k;
+      this.kneeR.rotation.x = -0.36 * k;
       this.root.position.y = -this.crouchDrop * k + this.climb * 5.4;
 
-      // Bend at the WAIST, which pivots at the hip joint where a body does.
-      this.waist.rotation.x = 0.72 * k;
-      this.neck.rotation.x = -0.3 * k; // face down into his hands
-      this.armL.rotation.x = -0.55 * k;
-      this.armR.rotation.x = -0.5 * k;
+      // Bent double at the hip — the head ends up down around hip height.
+      this.waist.rotation.x = 1.46 * k;
+      // Head tucked under, chin to chest.
+      this.neck.rotation.x = 0.4 * k;
+      // Arms up and over, hands meeting behind the skull.
+      //
+      // These are LOCAL to the waist, which is itself rotated forward, so the
+      // bend eats most of the rotation: at -2.45 the net world angle never got
+      // past horizontal and the hands ended up out in front at 0.88 while the
+      // head was at 1.64. The arm has to clear -pi/2 in WORLD terms to point
+      // upward at all, so it needs the waist bend added back on top.
+      const overHead = -(2.42 + 1.46);
+      this.armL.rotation.x = overHead * k;
+      this.armR.rotation.x = (overHead - 0.07) * k;
+      this.armL.rotation.z = 0.3 * k;
+      this.armR.rotation.z = -0.3 * k;
       // Shaking, not breathing. Faster and shallower than a resting body.
       const shudder = Math.sin(this.phase * 5.2) * 0.03 * k;
       this.waist.rotation.z = shudder;
