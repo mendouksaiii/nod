@@ -203,6 +203,7 @@ export class NodGame {
     });
 
     this.hasKey = false;
+    this.theo.hasKeyInPocket = false;
     this.showKey(false);
     this.checkpointX = this.floor.spawnX;
     this.theo.respawn(this.floor.spawnX);
@@ -506,6 +507,7 @@ export class NodGame {
           // occupied, so he could not pick anything else up for the rest of
           // the floor, and the key itself was hidden behind the torch.
           this.hasKey = true;
+          this.theo.hasKeyInPocket = true;
           it.consumed = true;
           it.mesh?.parent?.remove(it.mesh);
           this.audio.keyTaken();
@@ -775,6 +777,48 @@ export class NodGame {
     if (this.theo.footfall) {
       this.theo.footfall = false;
       this.audio.footstep(s.surface, s.effort);
+    }
+
+    // ── The Crying Man, the Collector ──
+    // One-frame flags off the entity, consumed here so the entity never has to
+    // know the audio engine exists.
+    if (this.entity) {
+      if (this.entity.justNoticed) {
+        this.entity.justNoticed = false;
+        this.audio.crying(false);          // the crying stops. that is the tell.
+        this.cam.shake(0.08);
+      }
+      if (this.entity.justScreamed) {
+        this.entity.justScreamed = false;
+        this.audio.scream();
+        this.cam.shake(0.45);
+      }
+      if (this.entity.justStole) {
+        this.entity.justStole = false;
+        this.hasKey = false;
+        this.theo.hasKeyInPocket = false;
+        this.showKey(false);
+        this.audio.stolen();
+        this.cam.shake(0.3);
+        this.showCard("it took the key", "it did not go far", 2600);
+        // Put the key back in the world where the thing is taking it, so the
+        // floor stays finishable — losing it must cost you the walk back, not
+        // the run.
+        const kx = this.entity.stashX ?? this.floor.spawnX + 10;
+        this.floor.interactables.push({
+          type: "carry", isKey: true, label: "take the old key",
+          trigger: new THREE.Box3(
+            new THREE.Vector3(kx - 1.2, 0, -1.2),
+            new THREE.Vector3(kx + 1.2, 1.6, 0.9)
+          ),
+        });
+      }
+      // He is crying whenever he has not noticed you
+      if (this.entity.sense === "sight" && this.entity.state === "patrol") {
+        this.audio.crying(true, THREE.MathUtils.clamp(
+          (this.entity.root.position.x - this.theo.position.x) / 14, -1, 1
+        ));
+      }
     }
 
     // The floor's warden changing its mind is the loudest story beat there is

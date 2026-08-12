@@ -45,8 +45,11 @@ export interface Interactable {
 
 /** Which sense the floor's warden hunts by. */
 export type SenseKind =
-  | "sight"
-  | "sound"
+  | "sight"       // 7 — the Crying Man: being seen
+  | "sound"       // 6 — the Listener: being heard
+  | "proximity"   // 5 — the Blind Man: being sensed
+  | "gaze"        // 4 — the Weeper: moves only when you are not facing it
+  | "theft"       // 3 — the Collector: wants what you are carrying
   | "smell"
   | "echo"
   | "vibration"

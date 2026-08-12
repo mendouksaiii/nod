@@ -51,6 +51,12 @@ export class Theo {
   fear = 0;
   /** He can leave without it. Some of them did. */
   hasBear = false;
+  /**
+   * Whether the key is in his pocket. Mirrored from the game so the Collector
+   * can tell there is something worth taking without the entity needing to
+   * reach into the game object.
+   */
+  hasKeyInPocket = false;
 
   takeBear() {
     this.hasBear = true;

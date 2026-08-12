@@ -352,7 +352,7 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
     camClamp: [5, 100],
     spawnX: 2.8, stairX: 103.3, unlocked: false, keySpot,
     entity: {
-      sense: "smell", shape: "feeder",
+      sense: "proximity", shape: "feeder",
       waypoints: [16, 34, 52, 68, 84], dwellSeconds: 1.6, startIndex: 3,
       safeBelow: 12.5, safeAbove: 89,
     },

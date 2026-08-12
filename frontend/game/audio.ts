@@ -882,6 +882,36 @@ export class NodAudio {
     this.tone({ hz: 130, hzEnd: 96, dur: 0.32, gain: 0.045, attack: 0.006 });
   }
 
+  /**
+   * The Crying Man. It is crying the whole time you are on his floor, from
+   * wherever he is standing, and the sound STOPPING is how you learn you have
+   * been seen. A cue you lose is far worse than a cue you gain.
+   */
+  crying(on: boolean, pan = 0) {
+    if (!this.started) return;
+    const t = this.now();
+    if (!on) {
+      this.presenceGain.gain.setTargetAtTime(0.0001, t, 0.06); // an abrupt stop
+      return;
+    }
+    this.presencePan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.3);
+    this.presenceGain.gain.setTargetAtTime(0.05, t, 0.8);
+  }
+
+  /** He has finished looking at you. */
+  scream() {
+    this.burst({ dur: 1.5, gain: 0.26, hz: 1500, hzEnd: 480, q: 1.2, attack: 0.015 });
+    this.tone({ hz: 620, hzEnd: 240, dur: 1.4, gain: 0.15, type: "sawtooth", attack: 0.02 });
+    this.tone({ hz: 934, hzEnd: 370, dur: 1.2, gain: 0.1, type: "square", attack: 0.03 });
+  }
+
+  /** Something small has been lifted off you. */
+  stolen() {
+    this.burst({ dur: 0.5, gain: 0.1, hz: 3200, hzEnd: 900, q: 5, attack: 0.004 });
+    this.tone({ hz: 1400, hzEnd: 300, dur: 0.7, gain: 0.06, type: "triangle", attack: 0.004 });
+    this.tone({ hz: 70, hzEnd: 48, dur: 1.3, gain: 0.09, attack: 0.02 });
+  }
+
   keyTaken() {
     this.tone({ hz: 2100, dur: 0.5, gain: 0.06, type: "triangle", attack: 0.003 });
     this.tone({ hz: 3150, dur: 0.35, gain: 0.035, type: "triangle", attack: 0.003 });

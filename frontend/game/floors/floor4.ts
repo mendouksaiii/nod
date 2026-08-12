@@ -323,7 +323,7 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
     spawnX: 2.8, stairX: 99.3, unlocked: false, keySpot: seed % 3,
     noise: 0,
     entity: {
-      sense: "echo", shape: "whisperer",
+      sense: "gaze", shape: "whisperer",
       waypoints: [16, 33, 50, 65, 80], dwellSeconds: 2.0, startIndex: 2,
       safeBelow: 12.5, safeAbove: 85,
     },

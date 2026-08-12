@@ -55,7 +55,7 @@ const LOST_GRACE = 1.0;
  * under the boards has nowhere to climb to — refusing them is as much
  * characterisation as letting the others.
  */
-const CAN_CLIMB = new Set<SenseKind>(["sight", "echo", "reflection"]);
+const CAN_CLIMB = new Set<SenseKind>(["sight", "echo", "reflection", "gaze"]);
 
 function depthScale(floor: number): number {
   return 1 + (7 - floor) * 0.075; // 1.00 on seven → 1.30 on two
@@ -68,6 +68,13 @@ const SENSE: Record<
 > = {
   sight: { range: CONE_RANGE, huntSpeed: 3.35, rise: 1.0, showsCone: true },
   sound: { range: 13, huntSpeed: 3.1, rise: 1.15, showsCone: false },
+  // Presence, not light or noise. Short range, but nothing denies it.
+  proximity: { range: 7.5, huntSpeed: 3.2, rise: 1.5, showsCone: false },
+  // The Weeper never hunts in the ordinary sense — it closes the distance
+  // while you are not facing it, and takes you when it arrives.
+  gaze: { range: 40, huntSpeed: 2.2, rise: 0.9, showsCone: false },
+  // The Collector is not trying to kill you. It wants the key.
+  theft: { range: 22, huntSpeed: 3.0, rise: 0.7, showsCone: false },
   smell: { range: 20, huntSpeed: 2.75, rise: 0.8, showsCone: false },
   echo: { range: 12.5, huntSpeed: 3.5, rise: 1.9, showsCone: false },
   vibration: { range: 17, huntSpeed: 4.1, rise: 1.35, showsCone: false },
@@ -131,6 +138,20 @@ export class Entity {
   private probe = new THREE.Box3();
   /** How long it has been unable to make progress. Guards against deadlock. */
   private stuckT = 0;
+  /** The Crying Man's beat: crying stops, it looks, THEN it screams. */
+  private noticeT = 0;
+  /** Raised for one frame when the crying cuts out. The game plays it. */
+  justNoticed = false;
+  /** Raised for one frame when it screams and commits. */
+  justScreamed = false;
+  /** The Collector has taken the key and is carrying it somewhere. */
+  holdingKey = false;
+  /** Raised for one frame when it lifts the key off you. */
+  justStole = false;
+  /** Where the Collector dumped what it took. */
+  stashX: number | null = null;
+  /** The Listener talks itself out of an investigation now and then. */
+  private doubtT = 0;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -464,7 +485,10 @@ export class Entity {
     floor: FloorBuild,
     ctx: FloorContext
   ): number {
-    if (theo.hidden && this.sense !== "smell") return 0;
+    // Hiding denies most senses. It does NOT deny presence: the Blind Man
+    // knows a body is near it whether or not that body is under a bed, which
+    // is the entire lesson of its floor.
+    if (theo.hidden && this.sense !== "smell" && this.sense !== "proximity") return 0;
 
     const s = SENSE[this.sense];
     const dx = theo.position.x - this.root.position.x;
@@ -502,6 +526,38 @@ export class Entity {
         loud = Math.max(loud, floor.noise ?? 0);
         if (theo.position.y > 0.6) loud *= 0.6; // up off the wet floor
         return loud * (0.45 + near * 0.55);
+      }
+
+      case "proximity": {
+        // Rings, not a cone. Far is nothing, medium is unease, close is
+        // certainty — and hiding only buys you anything if you are far enough
+        // away that it was never sure to begin with.
+        const near = theo.hidden ? dist * 1.35 : dist; // cover blurs it a little
+        if (near > 7.5) return 0;
+        if (near > 4.5) return 0.35; // it slows, and turns its head
+        if (near > 2.2) return 0.8;
+        return 1;
+      }
+
+      case "gaze": {
+        // The Weeper moves only while you are NOT facing it. In a fixed side
+        // camera "looking away" is which way the boy is turned — and turning
+        // away is exactly what you must do to walk on, which is the trap.
+        // dx runs FROM the warden TO the boy, so the way he must be turned to
+        // be looking at it is the opposite sign. Getting this backwards made
+        // the Weeper freeze whenever you turned your back and advance while
+        // you stared straight at it — precisely inside out.
+        const towardIt = Math.sign(this.root.position.x - theo.position.x);
+        const facingIt = theo.facing === towardIt;
+        // It never loses you and never needs to search. It only closes.
+        return facingIt ? 0 : 1;
+      }
+
+      case "theft": {
+        // It is interested in you only as far as you are carrying something.
+        // With nothing to take it drifts, watching.
+        if (dist > 22) return 0;
+        return 0.6;
       }
 
       case "smell": {
@@ -618,15 +674,111 @@ export class Entity {
 
     // A thrown object always wins its attention over you
     if (ctx.decoy && this.sense !== "vibration") {
-      this.lastSeenX = ctx.decoy.x;
-      if (this.state === "patrol" || this.state === "alert") {
-        this.state = "search";
-        this.searchT = 5;
+      // ...unless the Listener has started to doubt. It will follow a noise,
+      // but not forever, and not a second time in a row. Otherwise a bottle is
+      // an off switch and the floor has no teeth.
+      if (!(this.sense === "sound" && this.doubtT > 0)) {
+        this.lastSeenX = ctx.decoy.x;
+        if (this.state === "patrol" || this.state === "alert") {
+          this.state = "search";
+          this.searchT = 5;
+          this.doubtT = 0;
+        }
       }
+    }
+
+    // The Listener talks itself out of an investigation. Partway to a noise it
+    // stops, and goes back to standing still and listening — which is when a
+    // player who trusted the decoy is caught moving.
+    if (this.sense === "sound") {
+      if (this.state === "search") {
+        this.doubtT += dt;
+        if (this.doubtT > 3.2 && level <= 0) {
+          this.state = "alert";
+          this.suspicion = Math.max(this.suspicion, 0.4);
+          this.doubtT = -4; // it will not be fooled again for a while
+          this.vx = 0;
+        }
+      } else if (this.doubtT < 0) {
+        this.doubtT += dt;
+      } else {
+        this.doubtT = 0;
+      }
+    }
+
+    // ── The Weeper ──
+    // It has no patrol, no alert and no hunt. It stands still while the boy
+    // is facing it and closes while he is not, and it never loses him. Running
+    // it through the ordinary state machine would give it a chase, which is
+    // exactly the thing it must never do.
+    if (this.sense === "gaze" && this.state !== "seize") {
+      const dxw = theo.position.x - this.root.position.x;
+      // Same sign trap as in perceive(): he faces it when he is turned toward
+      // the warden, which is the opposite of the warden-to-boy vector.
+      const facingIt = theo.facing === Math.sign(-dxw);
+      this.faceToward(theo.position.x);
+      if (facingIt || theo.hidden) {
+        // Caught looking. It does not even breathe.
+        this.vx = 0;
+        this.state = "alert";
+      } else {
+        this.state = "hunt";
+        // Never a sprint. It is always simply nearer than it was.
+        this.vx = THREE.MathUtils.damp(
+          this.vx, Math.sign(dxw) * s.huntSpeed * 0.55 * depthScale(floor.floor), 3, dt
+        );
+      }
+      if (Math.abs(dxw) < CATCH_RANGE && !theo.hidden && !facingIt) {
+        this.state = "seize";
+        this.seizeT = 0;
+        this.vx = 0;
+      }
+      this.finishMove(dt, colliders, bounds, theo);
+      return;
+    }
+
+    // ── The Collector ──
+    // It is not trying to kill the boy. It wants what he is carrying, and
+    // once it has it, it loses interest in him entirely and goes to hide it.
+    // Being caught by this one costs you the floor's progress, not your life.
+    if (this.sense === "theft" && this.state !== "seize") {
+      const dxc = theo.position.x - this.root.position.x;
+      if (this.holdingKey) {
+        // Off to stash it. It does not look back.
+        const goal = this.stashX ?? bounds.maxX - 6;
+        const gdx = goal - this.root.position.x;
+        this.faceToward(goal);
+        this.vx = Math.abs(gdx) < 0.6
+          ? THREE.MathUtils.damp(this.vx, 0, 8, dt)
+          : THREE.MathUtils.damp(this.vx, Math.sign(gdx) * 2.4, 4, dt);
+        this.state = "search";
+      } else if (theo.hasKeyInPocket && Math.abs(dxc) < 22) {
+        // It has seen that he has something. It follows — never quite
+        // hurrying, which is worse than being chased.
+        this.faceToward(theo.position.x);
+        this.state = Math.abs(dxc) < 9 ? "hunt" : "alert";
+        this.vx = THREE.MathUtils.damp(
+          this.vx, Math.sign(dxc) * s.huntSpeed * 0.8 * depthScale(floor.floor), 4, dt
+        );
+        if (Math.abs(dxc) < CATCH_RANGE + 0.3 && !theo.hidden) {
+          this.holdingKey = true;
+          this.justStole = true;
+          // It takes it somewhere else on the floor, well away from him.
+          this.stashX = dxc > 0
+            ? Math.max(bounds.minX + 4, theo.position.x - 26)
+            : Math.min(bounds.maxX - 4, theo.position.x + 26);
+        }
+      } else {
+        this.state = "patrol";
+        this.patrol(dt);
+      }
+      this.finishMove(dt, colliders, bounds, theo);
+      return;
     }
 
     switch (this.state) {
       case "patrol":
+        this.noticeT = 0;
         if (this.suspicion > 0.35) this.state = "alert";
         this.patrol(dt);
         break;
@@ -634,6 +786,25 @@ export class Entity {
       case "alert":
         this.vx = THREE.MathUtils.damp(this.vx, 0, 8, dt);
         this.faceToward(this.lastSeenX);
+        // The Crying Man does not lunge the instant he notices. The crying
+        // stops FIRST — the silence is the tell — then he turns his head, and
+        // only then does he scream. That gap is the whole horror of the floor:
+        // you get about a second to understand what you have done.
+        if (this.sense === "sight") {
+          if (this.noticeT === 0) {
+            this.noticeT = 0.0001;
+            this.justNoticed = true; // crying cuts out
+          }
+          this.noticeT += dt;
+          if (this.suspicion >= 1 && this.noticeT > 1.15) {
+            this.justScreamed = true;
+            this.state = "hunt";
+          } else if (this.suspicion < 0.15) {
+            this.noticeT = 0;
+            this.state = "patrol";
+          }
+          break;
+        }
         if (this.suspicion >= 1) this.state = "hunt";
         else if (this.suspicion < 0.15) this.state = "patrol";
         break;
@@ -731,6 +902,23 @@ export class Entity {
         break;
     }
 
+    this.finishMove(dt, colliders, bounds, theo);
+  }
+
+
+  /**
+   * Apply the frame's movement: bounds, collision, climbing, animation.
+   *
+   * Extracted because the Weeper returns early from update() -- it has no
+   * patrol, alert or hunt to run through -- and it still has to collide and
+   * animate like everything else.
+   */
+  private finishMove(
+    dt: number,
+    colliders: THREE.Box3[],
+    bounds: { minX: number; maxX: number },
+    theo: Theo
+  ) {
     // It will not cross into the rooms it is afraid of
     const lo = Math.max(bounds.minX, this.spec.safeBelow);
     const hi = Math.min(bounds.maxX, this.spec.safeAbove);
