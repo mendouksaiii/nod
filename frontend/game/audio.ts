@@ -85,6 +85,15 @@ export class NodAudio {
   private droneB: OscillatorNode | null = null;
   private droneGain!: GainNode;
   private presenceGain!: GainNode;
+  /**
+   * The Crying Man has his own bus. He cannot share the presence bus: that one
+   * is rewritten from the warden's distance on every single frame, so anything
+   * else writing to it is silently erased before it can be heard.
+   */
+  private cryGain!: GainNode;
+  private cryPan!: StereoPannerNode;
+  private cryingOn = false;
+  private cryT = 0;
   private presencePan!: StereoPannerNode;
   private presenceOsc: OscillatorNode | null = null;
   private presenceNoiseGain!: GainNode;
@@ -174,6 +183,13 @@ export class NodAudio {
     this.presenceNoiseGain = c.createGain();
     this.presenceNoiseGain.gain.value = 0;
     this.presenceNoiseGain.connect(this.presencePan);
+
+    // ── The crying ──
+    this.cryPan = c.createStereoPanner();
+    this.cryGain = c.createGain();
+    this.cryGain.gain.value = 0;
+    this.cryGain.connect(this.cryPan);
+    this.cryPan.connect(this.ambience);
 
     // ── Running water ──
     // Two bands of filtered noise: a low rush for the column of water and a
@@ -528,6 +544,16 @@ export class NodAudio {
     } else {
       this.presenceGain.gain.setTargetAtTime(0, t, 0.5);
       this.presenceNoiseGain.gain.setTargetAtTime(0, t, 0.5);
+    }
+
+    // ── The crying, sob by sob ──
+    if (this.cryingOn) {
+      this.cryT -= dt;
+      if (this.cryT <= 0) {
+        this.sob();
+        // Irregular. A sob every N seconds on the dot reads as a machine.
+        this.cryT = 0.85 + Math.random() * 1.15;
+      }
     }
 
     // ── The room says something once in a while ──
@@ -890,12 +916,50 @@ export class NodAudio {
   crying(on: boolean, pan = 0) {
     if (!this.started) return;
     const t = this.now();
-    if (!on) {
-      this.presenceGain.gain.setTargetAtTime(0.0001, t, 0.06); // an abrupt stop
-      return;
+    this.cryingOn = on;
+    this.cryPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.3);
+    // Stopping is ABRUPT. It is the cue the whole floor is built on: the
+    // sound going away is how you learn he has noticed you, so it must cut,
+    // not fade.
+    this.cryGain.gain.setTargetAtTime(on ? 1 : 0.0001, t, on ? 0.6 : 0.04);
+    if (!on) this.cryT = 0;
+  }
+
+  /**
+   * One sob. A breath and a voice: filtered noise for the intake, a small
+   * detuned pair sliding down for the sound a child actually makes. Pitch and
+   * timing wander every time so it never becomes a loop you can hear.
+   */
+  private sob() {
+    const c = this.ctx!;
+    const t = this.now();
+    const base = 232 + Math.random() * 58;
+
+    const breath = c.createBufferSource();
+    breath.buffer = this.noise;
+    const bf = c.createBiquadFilter();
+    bf.type = "bandpass";
+    bf.frequency.value = 620 + Math.random() * 260;
+    bf.Q.value = 1.1;
+    const bg = c.createGain();
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.exponentialRampToValueAtTime(0.05, t + 0.06);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    breath.connect(bf); bf.connect(bg); bg.connect(this.cryGain);
+    breath.start(t); breath.stop(t + 0.5);
+
+    for (const [detune, level] of [[0, 0.05], [7, 0.028]] as const) {
+      const o = c.createOscillator();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(base + detune, t + 0.03);
+      o.frequency.exponentialRampToValueAtTime(base * 0.62 + detune, t + 0.5);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t + 0.03);
+      g.gain.exponentialRampToValueAtTime(level, t + 0.11);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.58);
+      o.connect(g); g.connect(this.cryGain);
+      o.start(t + 0.03); o.stop(t + 0.62);
     }
-    this.presencePan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.3);
-    this.presenceGain.gain.setTargetAtTime(0.05, t, 0.8);
   }
 
   /** He has finished looking at you. */

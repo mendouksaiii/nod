@@ -152,6 +152,8 @@ export class Entity {
   stashX: number | null = null;
   /** The Listener talks itself out of an investigation now and then. */
   private doubtT = 0;
+  /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
+  private crouch = 0;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -505,14 +507,25 @@ export class Entity {
           theo.position.y + 0.55,
           theo.position.z
         );
-        const look = new THREE.Vector3(this.facing, 0, 0);
-        const flat = new THREE.Vector3(dx, 0, theo.position.z - this.root.position.z);
-        if (flat.normalize().dot(look) < Math.cos(CONE_ANGLE + 0.12)) return 0;
         if (this.occluded(target, colliders)) return 0;
-        if (theo.flashOn && theo.battery > 0) return 1;
-        if (tier === "walk" || tier === "run") return 1;
-        if (tier === "sneak" && dist < 7.5) return 0.75;
-        return 0; // still, in shadow: it cannot find you
+
+        // While he is folded over crying he is not LOOKING anywhere, so a
+        // strict forward cone made him unprovokable — he faced his corner and
+        // you could walk past with the torch blazing. Crouched, he catches
+        // things at the edge of his attention instead: light and speed carry,
+        // stillness does not. He only has a cone once he is upright.
+        const crouched = this.crouch > 0.5;
+        if (!crouched) {
+          const look = new THREE.Vector3(this.facing, 0, 0);
+          const flat = new THREE.Vector3(dx, 0, theo.position.z - this.root.position.z);
+          if (flat.normalize().dot(look) < Math.cos(CONE_ANGLE + 0.12)) return 0;
+        }
+        // A torch in a dark room is the loudest thing you can do to him.
+        if (theo.flashOn && theo.battery > 0) return crouched ? (dist < 15 ? 1 : 0.5) : 1;
+        if (tier === "run") return crouched ? (dist < 12 ? 1 : 0.45) : 1;
+        if (tier === "walk") return crouched ? (dist < 7 ? 0.7 : 0) : 1;
+        if (tier === "sneak" && dist < 7.5) return crouched ? 0.25 : 0.75;
+        return 0; // still, torch off, in shadow: he never knows you were there
       }
 
       case "sound": {
@@ -780,7 +793,12 @@ export class Entity {
       case "patrol":
         this.noticeT = 0;
         if (this.suspicion > 0.35) this.state = "alert";
-        this.patrol(dt);
+        // The Crying Man does not walk a route. He is bent over in a corner
+        // with his back to the room, and he stays there until you give him a
+        // reason not to. Everything about the floor depends on him being a
+        // fixed, known, avoidable thing until the moment he is not.
+        if (this.sense === "sight") this.vx = THREE.MathUtils.damp(this.vx, 0, 6, dt);
+        else this.patrol(dt);
         break;
 
       case "alert":
@@ -1053,6 +1071,26 @@ export class Entity {
     this.legR.rotation.x = sw * stride;
     this.armL.rotation.x = sw * stride * 0.55;
     this.armR.rotation.x = -sw * stride * 0.55;
+
+    // ── Folded over ──
+    // Only the Crying Man does this, and it is the whole read of him from
+    // across the room: a shape on the floor, not a figure walking about.
+    if (this.sense === "sight") {
+      const want = this.state === "patrol" ? 1 : this.state === "alert" ? 1 - Math.min(1, this.noticeT / 1.15) : 0;
+      this.crouch = THREE.MathUtils.damp(this.crouch, want, 4.5, dt);
+      const k = this.crouch;
+      this.root.position.y = -0.62 * k + this.climb * 5.4;
+      this.torso.rotation.x = 0.95 * k;      // bent over his own knees
+      this.neck.rotation.x = -0.45 * k;      // face down into his hands
+      this.armL.rotation.x = -1.5 * k;
+      this.armR.rotation.x = -1.45 * k;
+      this.legL.rotation.x = 1.25 * k;
+      this.legR.rotation.x = 1.2 * k;
+      // Shaking, not breathing. Faster and shallower than a resting body.
+      const shudder = Math.sin(this.phase * 5.2) * 0.035 * k;
+      this.torso.rotation.z = shudder;
+      this.head.rotation.z = shudder * 1.6;
+    }
 
     // ── Idle life ──
     // Something that only ever walks its route reads as a machine. Between
