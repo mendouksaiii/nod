@@ -791,7 +791,12 @@ export class NodGame {
       if (this.entity.justScreamed) {
         this.entity.justScreamed = false;
         this.audio.scream();
-        this.cam.shake(0.45);
+        this.cam.shake(0.75);
+        // Being noticed by the Crying Man IS the death. There is no chase to
+        // survive: the crying stopping is the warning, the silence is the only
+        // time you get, and the scream is the end of the run. Everything on
+        // this floor is therefore about never being noticed at all.
+        if (!this.dying) this.beginDeath();
       }
       if (this.entity.justStole) {
         this.entity.justStole = false;
@@ -945,6 +950,9 @@ export class NodGame {
     // something or none of the floors below it mean anything.
     if (this.deathT > 2.0 && !this.resetDone) {
       this.resetDone = true;
+      // The scream ends the moment he wakes. Letting it ring on over the new
+      // floor would turn the hardest beat in the game into a loose end.
+      this.audio.cutScream();
       this.hud.card.textContent = "";
       // The old floor's group is disposed with it, bear included
       this.deathBear = null;

@@ -65,10 +65,17 @@ const PROFILES: Record<number, FloorProfile> = {
  * the amplitude envelope for a complete utterance — attack through decay —
  * around the loudest point in the file. Move them to pick a different line.
  */
+/**
+ * How long the scream is allowed to run. Tune here — the recording is far
+ * longer than the moment it scores.
+ */
+const SCREAM_SECONDS = 4.5;
+
 const VOICES = {
   behindYou: { url: "/audio/behind-you.mp3", offset: 15.6, duration: 3.1 },
   // The Crying Man. Looped, not one-shot — see startCrying().
   cryingMan: { url: "/audio/crying-man.mp3", offset: 0, duration: 0 },
+  cryingManScream: { url: "/audio/crying-man-scream.mp3", offset: 0, duration: 0 },
 } as const;
 
 export class NodAudio {
@@ -97,6 +104,7 @@ export class NodAudio {
   private cryingOn = false;
   private cryT = 0;
   private crySrc: AudioBufferSourceNode | null = null;
+  private screamSrc: AudioBufferSourceNode | null = null;
   private presencePan!: StereoPannerNode;
   private presenceOsc: OscillatorNode | null = null;
   private presenceNoiseGain!: GainNode;
@@ -1007,11 +1015,49 @@ export class NodAudio {
     }
   }
 
-  /** He has finished looking at you. */
+  /**
+   * He has finished looking at you.
+   *
+   * Deliberately loud and dry — no reverb send. Everything else in the house
+   * sits back in the room; this arrives in front of it, because it is the last
+   * thing that happens to you.
+   */
   scream() {
-    this.burst({ dur: 1.5, gain: 0.26, hz: 1500, hzEnd: 480, q: 1.2, attack: 0.015 });
-    this.tone({ hz: 620, hzEnd: 240, dur: 1.4, gain: 0.15, type: "sawtooth", attack: 0.02 });
-    this.tone({ hz: 934, hzEnd: 370, dur: 1.2, gain: 0.1, type: "square", attack: 0.03 });
+    const buf = this.voices.get("cryingManScream");
+    if (!buf) {
+      // Synthesised fallback until the recording is downloaded.
+      this.burst({ dur: 1.5, gain: 0.26, hz: 1500, hzEnd: 480, q: 1.2, attack: 0.015 });
+      this.tone({ hz: 620, hzEnd: 240, dur: 1.4, gain: 0.15, type: "sawtooth", attack: 0.02 });
+      this.tone({ hz: 934, hzEnd: 370, dur: 1.2, gain: 0.1, type: "square", attack: 0.03 });
+      return;
+    }
+    const c = this.ctx!;
+    const t = this.now();
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = 0.95;
+    src.connect(g);
+    g.connect(this.master);
+    src.start(t);
+
+    // The supplied recording is 31.7s. The death blackout and the reset to the
+    // top floor happen inside about a second, so played whole it would still
+    // be screaming well into the next run. Cut it off after the useful part
+    // with a short fade so the ending is a hard silence rather than a tail.
+    const hold = Math.min(SCREAM_SECONDS, buf.duration);
+    g.gain.setValueAtTime(0.95, t + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + hold + 0.55);
+    try { src.stop(t + hold + 0.6); } catch { /* nothing to stop */ }
+    this.screamSrc = src;
+  }
+
+  /** Silence the scream — used when a run resets out from under it. */
+  cutScream() {
+    if (!this.screamSrc) return;
+    const dead = this.screamSrc;
+    this.screamSrc = null;
+    try { dead.stop(this.now() + 0.05); } catch { /* already done */ }
   }
 
   /** Something small has been lifted off you. */
