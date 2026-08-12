@@ -168,9 +168,10 @@ export class Entity {
   /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
   private crouch = 0;
   /** How far the hips drop in a full crouch, so the feet stay on the floor. */
-  // He stays on his feet now, so the drop is only the small amount the softened
-  // knees actually lose. Measured against the sole, not guessed.
-  private crouchDrop = 0.12;
+  // Sitting: the hips come all the way down to the boards from 1.34.
+  // Split the difference: at 0.99 the fingertips finished 0.17 under the
+  // boards, at anything less the heels floated. This puts both within ~7cm.
+  private crouchDrop = 0.87;
   private idleTic = 0;
   /** Debug: what the last hiding-place check actually saw. */
   lastCheck: { atX: number; theoX: number; hidden: boolean; dist: number } | null = null;
@@ -1110,40 +1111,53 @@ export class Entity {
     this.armL.rotation.x = sw * stride * 0.55 * up;
     this.armR.rotation.x = -sw * stride * 0.55 * up;
 
-    // ── Folded over ──
-    // Not a crouch. He is on his feet, bent right down over himself with both
-    // arms wrapped up over his head — the shape a child makes when it wants to
-    // stop being looked at. Reads at a distance as a wrong angle in the room
-    // rather than as a figure standing about.
+    // ── Sitting on the floor ──
+    // Down on the boards with his legs out in front of him, slumped forward,
+    // head hanging. Not a crouch and not a cower — something that sat down a
+    // long time ago and has not got up since.
     if (this.sense === "sight") {
       const want = this.state === "patrol" ? 1
         : this.state === "alert" ? 1 - Math.min(1, this.noticeT / 1.15) : 0;
       this.crouch = THREE.MathUtils.damp(this.crouch, want, 4.5, dt);
       const k = this.crouch;
 
-      // Standing, knees only softened — the fold is at the waist, not the legs.
-      this.legL.rotation.x = 0.22 * k;
-      this.legR.rotation.x = 0.18 * k;
-      this.kneeL.rotation.x = -0.42 * k;
-      this.kneeR.rotation.x = -0.36 * k;
+      // Hips all the way down to the floor.
       this.root.position.y = -this.crouchDrop * k + this.climb * 5.4;
-
-      // Bent double at the hip — the head ends up down around hip height.
-      this.waist.rotation.x = 1.46 * k;
-      // Head tucked under, chin to chest.
-      this.neck.rotation.x = 0.4 * k;
-      // Arms up and over, hands meeting behind the skull.
+      // Thighs out in front along the boards, knees barely bent.
       //
-      // These are LOCAL to the waist, which is itself rotated forward, so the
-      // bend eats most of the rotation: at -2.45 the net world angle never got
-      // past horizontal and the hands ended up out in front at 0.88 while the
-      // head was at 1.64. The arm has to clear -pi/2 in WORLD terms to point
-      // upward at all, so it needs the waist bend added back on top.
-      const overHead = -(2.42 + 1.46);
-      this.armL.rotation.x = overHead * k;
-      this.armR.rotation.x = (overHead - 0.07) * k;
-      this.armL.rotation.z = 0.3 * k;
-      this.armR.rotation.z = -0.3 * k;
+      // NEGATIVE swings a limb forward. Positive swings it back, which had him
+      // folded double with both legs tucked away behind him — measured in body
+      // space, the foot sat 1.03 BEHIND the hip while the head was 1.09 in
+      // front of it. That is a face-plant, not a sit.
+      this.legL.rotation.x = -1.5 * k;
+      this.legR.rotation.x = -1.44 * k;
+      this.kneeL.rotation.x = 0.34 * k;
+      this.kneeR.rotation.x = 0.28 * k;
+
+      // Folded well forward over his own lap, not sitting up.
+      this.waist.rotation.x = 1.02 * k;
+      // Head hanging — you never see his face while he sits.
+      this.neck.rotation.x = 0.8 * k;
+      // Arms forward along his thighs, NOT hanging.
+      //
+      // Hanging them straight down put the hands at -0.2 and the lowest point
+      // of the body at -0.509: the arms are nearly as long as he is tall, so
+      // sitting down drove them half a metre through the boards. Laid forward
+      // they land on the legs where a sitting body actually rests them. Local
+      // to the waist, so the bend has to be subtracted back out.
+      // Arms are left to follow the bowed torso rather than being posed.
+      //
+      // They are nearly as long as he is tall, so once he sits there is barely
+      // a metre of air under the shoulder — every angle I posed them at drove
+      // the fingers through the boards (-0.337 at one setting, -0.789 at the
+      // next). Hanging along the line of the bent back is the one arrangement
+      // that cannot over-reach, because the torso is already pointing them
+      // down his own legs.
+      this.armL.rotation.x = 0;
+      this.armR.rotation.x = 0;
+      this.armL.rotation.z = 0.13 * k;
+      this.armR.rotation.z = -0.11 * k;
+
       // Shaking, not breathing. Faster and shallower than a resting body.
       const shudder = Math.sin(this.phase * 5.2) * 0.03 * k;
       this.waist.rotation.z = shudder;
