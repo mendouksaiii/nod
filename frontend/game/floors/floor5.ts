@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
-  FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
+  FloorBuild, journalPage, makeKey,
+  keyTrigger, picture, shell, solid, stairwellDoor,
   usable, writing, Zone,
 } from "../build";
 
@@ -327,7 +328,7 @@ export function buildFloor5(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(key);
   interactables.push({
     type: "carry",
-    trigger: box(spots[keySpot].x, spots[keySpot].y + 0.2, spots[keySpot].z, 1.2, 0.9, 1.2),
+    trigger: keyTrigger(spots[keySpot].x, spots[keySpot].y, spots[keySpot].z, 1.2),
     label: "take the reeking key", mesh: key, isKey: true, tag: "reeking",
   });
 

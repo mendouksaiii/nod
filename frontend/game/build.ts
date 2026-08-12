@@ -386,6 +386,26 @@ export function crayonDrawing(
 }
 
 /** The big old brass key every floor hides somewhere. */
+/**
+ * A grab volume for a key resting at (x, y, z).
+ *
+ * Keys are seeded onto furniture — shelves, sills, the tops of dressers — so
+ * they sit high and set back. A trigger merely centred on the key reaches
+ * neither the floor nor the walk lane, and the key becomes impossible to pick
+ * up by walking: you stand directly beneath it and the game offers nothing.
+ * That, plus a silently-skipped locked door, is a floor with no way down.
+ *
+ * So the volume always spans from the ground up to just above the key, and
+ * from wherever it rests forward to the lane the boy actually walks in.
+ */
+export function keyTrigger(x: number, y: number, z: number, hw = 1.2): THREE.Box3 {
+  const topY = Math.max(y + 0.7, 1.6);
+  return new THREE.Box3(
+    new THREE.Vector3(x - hw, 0, Math.min(z - 0.9, -1.2)),
+    new THREE.Vector3(x + hw, topY, Math.max(z + 0.9, 0.9))
+  );
+}
+
 export function makeKey(): THREE.Group {
   const g = new THREE.Group();
   const brass = new THREE.MeshStandardMaterial({

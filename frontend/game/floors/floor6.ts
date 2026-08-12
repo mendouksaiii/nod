@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
-  FloorBuild, journalPage, makeKey, picture, shell, solid, stairwellDoor,
+  FloorBuild, journalPage, makeKey,
+  keyTrigger, picture, shell, solid, stairwellDoor,
   usable, writing, Zone,
 } from "../build";
 
@@ -371,7 +372,7 @@ export function buildFloor6(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(key);
   const keyIt: FloorBuild["interactables"][number] = {
     type: "carry",
-    trigger: box(spots[keySpot].x, spots[keySpot].y + 0.2, spots[keySpot].z, 1.4, 0.9, 1.4),
+    trigger: keyTrigger(spots[keySpot].x, spots[keySpot].y, spots[keySpot].z, 1.4),
     label: "take the old key", mesh: key, isKey: true,
     consumed: keySpot === 0, // unreachable until drained
   };

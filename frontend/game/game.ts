@@ -385,7 +385,20 @@ export class NodGame {
    * ambient ones — otherwise a key that lands near a climbable ledge can
    * never be picked up. Ties break on whichever trigger he is nearest to.
    */
+  /** A stairwell door you have not yet found the key for. */
+  private isLocked(it: Interactable): boolean {
+    return it.type === "door" && it.tag !== "settle" && it.tag !== "exit" && !this.hasKey;
+  }
+
+  /** What the prompt says. A locked door admits that it is locked. */
+  private labelFor(it: Interactable): string {
+    return this.isLocked(it) ? "it will not open" : it.label;
+  }
+
   private rank(it: Interactable): number {
+    // Last, not first: a locked door must never mask a real interactable
+    // sitting near the stairwell.
+    if (this.isLocked(it)) return 9;
     if (it.type === "door") return 0;
     if (it.isKey) return 1;
     if (it.type === "hide") return 2;
@@ -406,7 +419,10 @@ export class NodGame {
     for (const it of this.floor.interactables) {
       if (it.consumed) continue;
       if (it === this.theo.carried) continue;
-      if (it.type === "door" && it.tag !== "settle" && it.tag !== "exit" && !this.hasKey) continue;
+      // A locked door is NOT skipped. Skipping it meant a player who reached
+      // the stairwell without the key was shown nothing at all — no door, no
+      // prompt, no hint that a key exists. The end of the floor read as a dead
+      // end and the game looked broken. It is offered, and it refuses.
       if (!it.trigger.containsPoint(probe)) continue;
       it.trigger.getCenter(centre);
       const score = this.rank(it) * 1000 + probe.distanceTo(centre);
@@ -506,6 +522,12 @@ export class NodGame {
         break;
       }
       case "door":
+        if (this.isLocked(it)) {
+          // Tell him what he is missing, and say it in the house's voice.
+          this.showCard("locked", "there is a key on this floor", 2400);
+          this.audio.pickup();
+          break;
+        }
         if (it.tag === "settle") this.beginSettle();
         else if (it.tag === "exit") this.beginEscape();
         else this.beginDescent();
@@ -638,7 +660,7 @@ export class NodGame {
         this.hud.prompt.textContent = "E — come out";
         this.hud.prompt.style.opacity = "0.8";
       } else if (it) {
-        this.hud.prompt.textContent = `E — ${it.label}`;
+        this.hud.prompt.textContent = `E — ${this.labelFor(it)}`;
         this.hud.prompt.style.opacity = "0.8";
       } else {
         this.hud.prompt.style.opacity = "0";

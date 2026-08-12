@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
   bookPile, bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider,
-  fills, FloorBuild, journalPage, makeKey, picture, shell, solid,
+  fills, FloorBuild, journalPage, makeKey,
+  keyTrigger, picture, shell, solid,
   stairwellDoor, usable, writing, Zone,
 } from "../build";
 
@@ -310,7 +311,7 @@ export function buildFloor4(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(key);
   const keyIt: FloorBuild["interactables"][number] = {
     type: "carry",
-    trigger: box(36, 0.5, 0.4, 1.0, 0.7, 1.0),
+    trigger: keyTrigger(36, 0.2, 0.4, 1.1),
     label: "take the wound key", mesh: key, isKey: true, consumed: true,
   };
 

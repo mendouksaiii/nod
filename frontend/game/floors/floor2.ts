@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
   bottles, box, cloth, cobweb, crayonDrawing, D, debris, divider, fills,
-  FloorBuild, journalPage, makeKey, shell, solid, stairwellDoor, usable, writing, Zone,
+  FloorBuild, journalPage, makeKey,
+  keyTrigger, shell, solid, stairwellDoor, usable, writing, Zone,
 } from "../build";
 
 // FLOOR 2 — THE MIRROR FLOOR. Cold silvers over rot. The thing here wears
@@ -265,7 +266,7 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(key);
   interactables.push({
     type: "carry",
-    trigger: box(anchors.x, anchors.y + 0.3, anchors.z, 1.4, 1.0, 1.4),
+    trigger: keyTrigger(anchors.x, anchors.y, anchors.z, 1.4),
     label: "take the old key", mesh: key, isKey: true,
   });
 

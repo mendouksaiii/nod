@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import {
   box, cloth, cobweb, crayonDrawing, D, debris, divider, fills, FloorBuild,
-  journalPage, makeKey, picture, shell, solid, stairwellDoor, usable, writing, Zone,
+  journalPage, makeKey,
+  keyTrigger, picture, shell, solid, stairwellDoor, usable, writing, Zone,
 } from "../build";
 
 // FLOOR 3 — THE CORRIDORS. Rusted reds, and the longest emptiest floor in
@@ -264,7 +265,7 @@ export function buildFloor3(scene: THREE.Scene, seed: number): FloorBuild {
   group.add(key);
   interactables.push({
     type: "carry",
-    trigger: box(spots[keySpot].x, spots[keySpot].y, spots[keySpot].z, 1.3, 1.6, 1.3),
+    trigger: keyTrigger(spots[keySpot].x, spots[keySpot].y, spots[keySpot].z, 1.3),
     label: "take the old key", mesh: key, isKey: true,
   });
   if (keySpot === 0) {
