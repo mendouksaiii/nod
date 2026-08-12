@@ -67,6 +67,8 @@ const PROFILES: Record<number, FloorProfile> = {
  */
 const VOICES = {
   behindYou: { url: "/audio/behind-you.mp3", offset: 15.6, duration: 3.1 },
+  // The Crying Man. Looped, not one-shot — see startCrying().
+  cryingMan: { url: "/audio/crying-man.mp3", offset: 0, duration: 0 },
 } as const;
 
 export class NodAudio {
@@ -94,6 +96,7 @@ export class NodAudio {
   private cryPan!: StereoPannerNode;
   private cryingOn = false;
   private cryT = 0;
+  private crySrc: AudioBufferSourceNode | null = null;
   private presencePan!: StereoPannerNode;
   private presenceOsc: OscillatorNode | null = null;
   private presenceNoiseGain!: GainNode;
@@ -235,6 +238,9 @@ export class NodAudio {
         if (!res.ok) continue;
         const bytes = await res.arrayBuffer();
         this.voices.set(name, await this.ctx!.decodeAudioData(bytes));
+        // If he started crying before this finished downloading, the fallback
+        // sobs are playing — swap to the real clip the moment it is ready.
+        if (name === "cryingMan" && this.cryingOn && !this.crySrc) this.startCrying();
       } catch {
         // A clip that will not load is not worth breaking the game over
       }
@@ -547,7 +553,8 @@ export class NodAudio {
     }
 
     // ── The crying, sob by sob ──
-    if (this.cryingOn) {
+    if (this.cryingOn && !this.crySrc) {
+      // Only while the recording is still loading.
       this.cryT -= dt;
       if (this.cryT <= 0) {
         this.sob();
@@ -916,13 +923,51 @@ export class NodAudio {
   crying(on: boolean, pan = 0) {
     if (!this.started) return;
     const t = this.now();
-    this.cryingOn = on;
     this.cryPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.3);
+
+    if (on) {
+      // Idempotent: the game calls this every frame he is still crying, and
+      // restarting the source each time would machine-gun the clip.
+      if (!this.cryingOn) {
+        this.cryingOn = true;
+        this.startCrying();
+      }
+      this.cryGain.gain.setTargetAtTime(0.75, t, 0.5);
+      return;
+    }
+
+    if (!this.cryingOn) return;
+    this.cryingOn = false;
     // Stopping is ABRUPT. It is the cue the whole floor is built on: the
-    // sound going away is how you learn he has noticed you, so it must cut,
-    // not fade.
-    this.cryGain.gain.setTargetAtTime(on ? 1 : 0.0001, t, on ? 0.6 : 0.04);
-    if (!on) this.cryT = 0;
+    // sound going away is how you learn he has noticed you, so it cuts.
+    this.cryGain.gain.setTargetAtTime(0.0001, t, 0.035);
+    const dead = this.crySrc;
+    this.crySrc = null;
+    if (dead) {
+      try { dead.stop(t + 0.2); } catch { /* already stopped */ }
+    }
+  }
+
+  /**
+   * Start the loop.
+   *
+   * If the clip has not finished downloading yet he falls back to the
+   * synthesised sob, so the floor is never silent while the network catches
+   * up — the crying is load-bearing, not decoration.
+   */
+  private startCrying() {
+    const buf = this.voices.get("cryingMan");
+    if (!buf) return; // sob() covers it until the clip arrives
+    const c = this.ctx!;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    // Slightly off nominal so a listener standing still for a minute does not
+    // start hearing the seam.
+    src.playbackRate.value = 0.94;
+    src.connect(this.cryGain);
+    src.start(this.now());
+    this.crySrc = src;
   }
 
   /**
