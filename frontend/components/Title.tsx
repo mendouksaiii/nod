@@ -277,7 +277,7 @@ export default function Title() {
       const run = await link.runState();
       if (!run.active) {
         setMessage("the house learns your name…");
-        await link.enterHouse();
+        await link.enterHouse(playerName.trim());
         push("run", "entered — floor 7");
       } else {
         push("run", `resumed — floor ${run.floor}`);
