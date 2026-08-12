@@ -798,6 +798,14 @@ export class NodGame {
         // this floor is therefore about never being noticed at all.
         if (!this.dying) this.beginDeath();
       }
+      if (this.entity.justCrept) {
+        this.entity.justCrept = false;
+        this.audio.weeperMoved(
+          THREE.MathUtils.clamp(
+            (this.entity.root.position.x - this.theo.position.x) / 12, -1, 1
+          )
+        );
+      }
       if (this.entity.justStole) {
         this.entity.justStole = false;
         this.hasKey = false;

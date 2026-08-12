@@ -162,6 +162,9 @@ export class Entity {
   stashX: number | null = null;
   /** The Listener talks itself out of an investigation now and then. */
   private doubtT = 0;
+  /** Raised once each time the Weeper has closed a meaningful distance. */
+  justCrept = false;
+  private creptFrom = 0;
   /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
   private crouch = 0;
   /** How far the hips drop in a full crouch, so the feet stay on the floor. */
@@ -764,6 +767,13 @@ export class Entity {
         this.vx = THREE.MathUtils.damp(
           this.vx, Math.sign(dxw) * s.huntSpeed * 0.55 * depthScale(floor.floor), 3, dt
         );
+        // It is silent while it moves. The only thing you ever hear from it is
+        // a scrape once it has ALREADY arrived somewhere new — the sound is
+        // never a warning, only a receipt.
+        if (Math.abs(this.root.position.x - this.creptFrom) > 2.6) {
+          this.creptFrom = this.root.position.x;
+          this.justCrept = true;
+        }
       }
       if (Math.abs(dxw) < CATCH_RANGE && !theo.hidden && !facingIt) {
         this.state = "seize";

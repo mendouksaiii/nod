@@ -127,6 +127,8 @@ export class NodAudio {
   private incidentalT = 6;
   private heartT = 0;
   private whisperT = 4;
+  /** Per-warden signature cue, scheduled independently of the room's own noises. */
+  private senseT = 3;
   private started = false;
 
   get ready() {
@@ -577,6 +579,41 @@ export class NodAudio {
       const [lo, hi] = this.profile.incidental;
       this.incidentalT = lo + Math.random() * (hi - lo);
       this.incidental();
+    }
+
+    // ── Whichever thing is on this floor, in its own voice ──
+    // Only when it is not already hunting: once you are being chased the mix
+    // is meant to strip back, and a signature cue on top of that would be
+    // telling you something you can already see.
+    if (s.entityDx !== null && !s.entityHunting) {
+      this.senseT -= dt;
+      if (this.senseT <= 0) {
+        const pan = Math.max(-1, Math.min(1, s.entityDx / 12));
+        const near = Math.max(0, 1 - Math.abs(s.entityDx) / 16);
+        switch (this.floor) {
+          case 6:
+            this.listenerBreath(pan);
+            this.senseT = 6 + Math.random() * 5;
+            break;
+          case 5:
+            // Closer means more often: the rhythm is the range-finder.
+            this.blindRasp(pan, near);
+            this.senseT = 3.4 - near * 2.1 + Math.random() * 1.2;
+            break;
+          case 3:
+            this.collectorRattle(pan);
+            this.senseT = 4 + Math.random() * 4;
+            break;
+          case 2:
+            this.glassStress(pan);
+            this.senseT = 7 + Math.random() * 6;
+            break;
+          default:
+            // 4 is deliberately silent — the Weeper only makes a sound after
+            // it has already moved, and that is fired from the game.
+            this.senseT = 5;
+        }
+      }
     }
 
     // ── The fourth floor whispers between its pings ──
@@ -1065,6 +1102,133 @@ export class NodAudio {
     this.burst({ dur: 0.5, gain: 0.1, hz: 3200, hzEnd: 900, q: 5, attack: 0.004 });
     this.tone({ hz: 1400, hzEnd: 300, dur: 0.7, gain: 0.06, type: "triangle", attack: 0.004 });
     this.tone({ hz: 70, hzEnd: 48, dur: 1.3, gain: 0.09, attack: 0.02 });
+  }
+
+  // ── Each warden's own voice ────────────────────────────────────────
+  // Synthesised rather than sampled, so every one of these is tuned to the
+  // mechanic it belongs to instead of approximately fitting it — the Listener's
+  // breath sits in the gap where you have to move, the Blind Man's rasp gets
+  // shorter as he closes, and none of it is anybody else's to license.
+
+  /**
+   * The Listener. Standing in the flooded dark with her head down: a long wet
+   * intake, water moving around her legs, and nothing else. The sound has to
+   * be sparse, because on her floor the player is listening as hard as she is.
+   */
+  private listenerBreath(pan: number) {
+    const c = this.ctx!, t = this.now();
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(300, t);
+    bp.frequency.exponentialRampToValueAtTime(1150, t + 1.5); // drawing in
+    bp.Q.value = 2.4;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.9);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+    const pn = c.createStereoPanner();
+    pn.pan.value = pan;
+    src.connect(bp); bp.connect(g); g.connect(pn); pn.connect(this.ambience);
+    src.start(t); src.stop(t + 2.3);
+  }
+
+  /**
+   * The Blind Man. He does not see or hear — he tastes the room. A dry rasping
+   * sniff, and the closer he is the shorter and more frequent it gets, so the
+   * sound itself is the distance readout.
+   */
+  private blindRasp(pan: number, near: number) {
+    const c = this.ctx!, t = this.now();
+    const dur = 0.5 - near * 0.22;
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    const hp = c.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 900 + near * 700;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05 + near * 0.05, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const pn = c.createStereoPanner();
+    pn.pan.value = pan;
+    src.connect(hp); hp.connect(g); g.connect(pn); pn.connect(this.ambience);
+    src.start(t); src.stop(t + dur + 0.05);
+    // a wet click at the back of the throat
+    this.tone({ hz: 96, hzEnd: 62, dur: 0.16, gain: 0.05 + near * 0.04, attack: 0.004 });
+  }
+
+  /**
+   * The Weeper. It makes no sound while it moves — that is the point of it.
+   * What you get is the room reacting AFTER the fact: a single dry scrape of
+   * stone somewhere you were not looking, once it has already arrived.
+   */
+  weeperMoved(pan: number) {
+    const c = this.ctx!;
+    if (!this.started) return;
+    const t = this.now();
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(1800, t);
+    bp.frequency.exponentialRampToValueAtTime(420, t + 0.6);
+    bp.Q.value = 3.2;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.075, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    const pn = c.createStereoPanner();
+    pn.pan.value = pan;
+    src.connect(bp); bp.connect(g); g.connect(pn); pn.connect(this.verb);
+    pn.connect(this.ambience);
+    src.start(t); src.stop(t + 0.75);
+  }
+
+  /**
+   * The Collector. Everything it has ever taken hangs off it, so it announces
+   * itself as a small bright rattle of things that used to belong to children.
+   */
+  private collectorRattle(pan: number) {
+    const c = this.ctx!, t = this.now();
+    const pn = c.createStereoPanner();
+    pn.pan.value = pan;
+    pn.connect(this.ambience);
+    // five little metal hits, unevenly spaced
+    for (let i = 0; i < 5; i++) {
+      const at = t + i * (0.045 + Math.random() * 0.07);
+      const o = c.createOscillator();
+      o.type = "square";
+      o.frequency.value = 2100 + Math.random() * 2600;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.022, at + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+      o.connect(g); g.connect(pn);
+      o.start(at); o.stop(at + 0.2);
+    }
+  }
+
+  /** The mirror floor: glass under stress, never quite breaking. */
+  private glassStress(pan: number) {
+    const c = this.ctx!, t = this.now();
+    const pn = c.createStereoPanner();
+    pn.pan.value = pan;
+    pn.connect(this.verb);
+    pn.connect(this.ambience);
+    for (const [hz, lvl] of [[2270, 0.03], [3405, 0.018], [5107, 0.01]] as const) {
+      const o = c.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(hz, t);
+      o.frequency.linearRampToValueAtTime(hz * 1.012, t + 2.4);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(lvl, t + 0.7);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+      o.connect(g); g.connect(pn);
+      o.start(t); o.stop(t + 2.7);
+    }
   }
 
   keyTaken() {
