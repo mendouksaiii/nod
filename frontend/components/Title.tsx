@@ -187,19 +187,28 @@ export default function Title() {
     setMessage("");
     try {
       if (!isConnected) {
-        const injected = connectors[0];
-        if (!injected) throw new Error("no wallet found in this browser");
-        // A browser with no injected provider will never show a prompt, so say
-        // so now instead of leaving the visitor watching an ellipsis.
-        if (typeof window !== "undefined" && !(window as unknown as { ethereum?: unknown }).ethereum) {
+        // Do NOT gate on window.ethereum.
+        //
+        // wagmi has EIP-6963 discovery on by default and most current wallets
+        // announce themselves that way WITHOUT necessarily setting
+        // window.ethereum. The check I added here was rejecting real wallets
+        // before they were ever asked — it turned a working wallet into "no
+        // wallet in this browser".
+        //
+        // Prefer a wallet that actually announced itself over the generic
+        // injected shim, which is a fallback and may target nothing.
+        const discovered = connectors.filter((c) => c.id !== "injected");
+        const target = discovered[0] ?? connectors[0];
+        if (!target) {
           throw new Error(
-            "no wallet in this browser. install one, or go in without being remembered."
+            "no wallet found in this browser. install one, or go in without being remembered."
           );
         }
+        setMessage(`asking ${target.name}…`);
         // connect() is fire-and-forget in wagmi v2 — a rejection lands in
         // connectError, not here — so the failure path is wired explicitly.
         connect(
-          { connector: injected },
+          { connector: target },
           {
             onError: (e) => {
               setPhase("error");
@@ -573,6 +582,24 @@ export default function Title() {
         <>
           <p style={{ opacity: 0.82, fontSize: "0.85rem", maxWidth: "32rem", lineHeight: 1.8 }}>
             {message}
+          </p>
+          {/* What the browser actually offered. Without this, a wallet that
+              refuses to open is indistinguishable from one that is not there,
+              and the only way to tell them apart is to guess. */}
+          <p style={{
+            opacity: 0.5, fontSize: "0.7rem", fontFamily: "ui-monospace, monospace",
+            marginTop: "0.9rem", maxWidth: "30rem", lineHeight: 1.7,
+          }}>
+            wallets detected:{" "}
+            {connectors.length
+              ? connectors.map((c) => `${c.name} (${c.id})`).join(", ")
+              : "none"}
+            {" · "}
+            window.ethereum:{" "}
+            {typeof window !== "undefined" &&
+            (window as unknown as { ethereum?: unknown }).ethereum
+              ? "present"
+              : "absent"}
           </p>
           <button style={button} onClick={() => void wake()}>
             TRY AGAIN
