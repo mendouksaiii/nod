@@ -189,7 +189,28 @@ export default function Title() {
       if (!isConnected) {
         const injected = connectors[0];
         if (!injected) throw new Error("no wallet found in this browser");
-        connect({ connector: injected });
+        // A browser with no injected provider will never show a prompt, so say
+        // so now instead of leaving the visitor watching an ellipsis.
+        if (typeof window !== "undefined" && !(window as unknown as { ethereum?: unknown }).ethereum) {
+          throw new Error(
+            "no wallet in this browser. install one, or go in without being remembered."
+          );
+        }
+        // connect() is fire-and-forget in wagmi v2 — a rejection lands in
+        // connectError, not here — so the failure path is wired explicitly.
+        connect(
+          { connector: injected },
+          {
+            onError: (e) => {
+              setPhase("error");
+              setMessage(
+                /reject|denied|user/i.test(e.message)
+                  ? "you closed the wallet. nothing has been signed."
+                  : e.message
+              );
+            },
+          }
+        );
       }
       // Never call beginRun() from here, even when isConnected is ALREADY true.
       //
@@ -228,7 +249,20 @@ export default function Title() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, isConnected, walletClient, publicClient, address]);
 
-  // A rejected or ignored wallet prompt must not hang the screen either.
+  // Any connector error ends the wait at once. Previously this was only read
+  // by the watchdog below, so a wallet that refused instantly still left the
+  // screen sitting on "waiting for your wallet…" for the full 25 seconds.
+  useEffect(() => {
+    if (phase !== "connecting" || !connectError) return;
+    setPhase("error");
+    setMessage(
+      /reject|denied|user/i.test(connectError.message)
+        ? "you closed the wallet. nothing has been signed."
+        : connectError.message
+    );
+  }, [phase, connectError]);
+
+  // A prompt that is opened and then ignored must not hang the screen either.
   useEffect(() => {
     if (phase !== "connecting") return;
     const bail = setTimeout(() => {
@@ -239,7 +273,7 @@ export default function Title() {
             "the wallet never answered. check it is unlocked and on base sepolia, or go in without being remembered."
         );
       }
-    }, 25000);
+    }, 12000);
     return () => clearTimeout(bail);
   }, [phase, connectError]);
 
@@ -513,9 +547,26 @@ export default function Title() {
       )}
 
       {(phase === "connecting" || phase === "waking") && (
-        <p style={{ opacity: 0.78, fontStyle: "italic", fontSize: "0.9rem", marginTop: "1.5rem" }}>
-          {message || "…"}
-        </p>
+        <>
+          <p style={{ opacity: 0.78, fontStyle: "italic", fontSize: "0.9rem", marginTop: "1.5rem" }}>
+            {message || "…"}
+          </p>
+          {/* The way out has to be reachable WHILE waiting, not only after it
+              has failed. If a wallet never opens its prompt there is otherwise
+              nothing on screen to click, and the page reads as broken. */}
+          {phase === "connecting" && (
+            <button
+              style={{
+                ...button, marginTop: "1.2rem", fontSize: "0.74rem",
+                letterSpacing: "0.12em", opacity: 0.6,
+                borderColor: "rgba(200,210,190,0.18)",
+              }}
+              onClick={startOffline}
+            >
+              GO IN WITHOUT WAITING
+            </button>
+          )}
+        </>
       )}
 
       {phase === "error" && (
