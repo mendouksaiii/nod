@@ -74,6 +74,22 @@ export class NodGame {
   private transT = 0;
   private swapped = false;
   private hasKey = false;
+  /**
+   * The Imitator, on the ground floor.
+   *
+   * Not a warden — a second Theo, driven by a recording of what you did a few
+   * seconds ago. It is the same body, the same walk cycle and the same torch,
+   * because the whole point is that there is nothing about it to identify as
+   * a monster. Everything wrong with it is in the timing.
+   */
+  private twin: Theo | null = null;
+  private twinTape: { moveX: number; run: boolean; sneak: boolean; flash: boolean }[] = [];
+  /** How far behind you it is, in frames. Shrinks to zero, then goes negative. */
+  private twinLag = 300;
+  private twinT = 0;
+  private twinSeen = false;
+  /** Set once it has walked through the space you were standing in. */
+  private twinPassed = false;
   private decoy: { x: number; strength: number } | null = null;
   private decoyT = 0;
   private ctx: FloorContext = {
@@ -173,6 +189,10 @@ export class NodGame {
     }
     this.entity?.dispose(this.scene);
     this.entity = null;
+    // Theo has no dispose — he is built once and lives for the session — so
+    // the twin is torn out of the scene by hand.
+    if (this.twin) { this.scene.remove(this.twin.root); this.twin = null; }
+    this.twinTape = []; this.twinT = 0; this.twinLag = 300; this.twinSeen = false; this.twinPassed = false;
     this.floorNumber = n;
 
     // The house decides how this floor is laid out — and only tells you
@@ -664,6 +684,7 @@ export class NodGame {
     }
 
     this.theo.update(dt, this.input, this.floor.colliders, this.floor.bounds);
+    this.updateTwin(dt);
 
     if (this.decoyT > 0) this.decoyT -= dt;
     else this.decoy = null;
@@ -871,6 +892,97 @@ export class NodGame {
   }
 
   // ── The house takes you ─────────────────────────────────────────────
+
+  /**
+   * The Imitator.
+   *
+   * It replays your own input on a delay, so it walks the way you walk, stops
+   * where you stopped and turns its torch on where you turned yours on. Then
+   * the delay closes. By the end it is running your inputs BEFORE you make
+   * them, which is the moment it stops being an echo.
+   */
+  private updateTwin(dt: number) {
+    if (this.floorNumber !== BOTTOM_FLOOR || this.dying) return;
+
+    // Everything you did this frame goes on the tape.
+    this.twinTape.push({
+      moveX: this.input.moveX,
+      run: this.input.run,
+      sneak: this.input.sneak,
+      flash: this.theo.flashOn,
+    });
+    if (this.twinTape.length > 1200) this.twinTape.shift();
+
+    this.twinT += dt;
+    // It does not exist for the first stretch of the walk. You are supposed to
+    // believe this floor is empty, exactly as it always was.
+    if (this.twinT < 14) return;
+
+    if (!this.twin) {
+      this.twin = new Theo(this.scene);
+      // Far down the corridor, walking the same way you are.
+      this.twin.respawn(Math.min(this.floor.bounds.maxX - 6, this.theo.position.x + 24));
+      this.twin.hasBear = false;
+    }
+
+    // The lag closes with DISTANCE WALKED, not with time.
+    //
+    // On a timer it never caught up: after 70 seconds it was still 65 frames
+    // behind, and the ground floor does not last that long — you would reach
+    // the door having only ever seen a figure keeping its distance. Tied to
+    // progress, it goes level with you at about four fifths of the way and is
+    // running ahead of your inputs for the last stretch, which is exactly
+    // where the floor wants it.
+    const span = Math.max(1, this.floor.stairX - this.floor.spawnX);
+    const progress = (this.theo.position.x - this.floor.spawnX) / span;
+    this.twinLag = Math.max(-90, Math.round(300 - progress * 380));
+    const idx = this.twinTape.length - 1 - Math.max(0, this.twinLag);
+    const frame = this.twinTape[Math.max(0, Math.min(this.twinTape.length - 1, idx))];
+
+    // Once the lag has run out it stops copying and starts closing.
+    const predicting = this.twinLag <= 0;
+    const toward = Math.sign(this.theo.position.x - this.twin.position.x) || 1;
+    // Once it has walked through you it stops hunting and simply carries on,
+    // which is what leaves the way to the door open.
+    const fake = {
+      moveX: this.twinPassed ? 1 : predicting ? toward : frame.moveX,
+      run: predicting ? true : frame.run,
+      sneak: predicting ? false : frame.sneak,
+      frozen: false, jump: false,
+      consumeInteract: () => false,
+      consumeDrop: () => false,
+      consumeFlashlight: () => false,
+    } as unknown as Input;
+    this.twin.flashOn = frame.flash;
+    this.twin.update(dt, fake, this.floor.colliders, this.floor.bounds);
+
+    const gap = Math.abs(this.twin.position.x - this.theo.position.x);
+    if (!this.twinSeen && gap < 22) {
+      this.twinSeen = true;
+      this.showCard("someone is walking ahead of you", "he walks the way you walk", 3200);
+    }
+
+    // It only takes you if you are MOVING.
+    //
+    // Without this the floor was unwinnable: it spawns between you and the
+    // door and turns back to meet you, so walking got caught at 86% of the
+    // way and running at 90% — there was no version of the walk that ended
+    // at the door. It predicts what you were going to do, so the counter is
+    // to stop doing it. Stand still and the prediction runs on past you, and
+    // the last thing the house asks of you is the first thing it taught you
+    // on the seventh floor.
+    const moving = this.theo.speedTier !== "still";
+    // Once it has walked through you it is spent. Leaving it lethal after
+    // that meant standing still only delayed the catch — you froze, it passed,
+    // you set off again, caught up with it and died at 99% of the way to the
+    // door. Surviving it has to actually survive it.
+    if (predicting && gap < 1.0 && moving && !this.twinPassed) this.beginDeath();
+    if (predicting && gap < 2.4 && !moving) {
+      // It walks on through the space you are standing in, still copying a
+      // version of you that kept going.
+      this.twinPassed = true;
+    }
+  }
 
   private beginDeath() {
     this.dying = true;

@@ -75,6 +75,9 @@ const SENSE: Record<
   gaze: { range: 40, huntSpeed: 2.2, rise: 0.9, showsCone: false },
   // The Collector is not trying to kill you. It wants the key.
   theft: { range: 22, huntSpeed: 3.0, rise: 0.7, showsCone: false },
+  // The Mimic senses nothing at range. It is furniture until you are close
+  // enough to have already made the mistake.
+  mimic: { range: 4.2, huntSpeed: 3.45, rise: 2.6, showsCone: false },
   smell: { range: 20, huntSpeed: 2.75, rise: 0.8, showsCone: false },
   echo: { range: 12.5, huntSpeed: 3.5, rise: 1.9, showsCone: false },
   vibration: { range: 17, huntSpeed: 4.1, rise: 1.35, showsCone: false },
@@ -165,6 +168,12 @@ export class Entity {
   /** Raised once each time the Weeper has closed a meaningful distance. */
   justCrept = false;
   private creptFrom = 0;
+  /** The shape it wears while pretending to be part of the room. */
+  private shell?: THREE.Mesh;
+  /** 1 = fully disguised, 0 = revealed. */
+  private disguise = 1;
+  /** Raised the frame the disguise breaks. */
+  justRevealed = false;
   /** How folded up he is. 1 = crouched over his knees, 0 = upright. */
   private crouch = 0;
   /** How far the hips drop in a full crouch, so the feet stay on the floor. */
@@ -403,6 +412,23 @@ export class Entity {
       knee.add(shin, foot);
       grp.add(knee);
       this.root.add(grp);
+    }
+
+    // The Mimic wears a piece of furniture. It is deliberately the dullest
+    // object on the floor — a covered chair — because the whole trick depends
+    // on it being something you have already walked past a dozen times.
+    if (spec.sense === "mimic") {
+      const shellMat = new THREE.MeshStandardMaterial({ color: 0x2a2d38, roughness: 1 });
+      const shell = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.85), shellMat);
+      shell.position.y = 0.58;
+      shell.castShadow = true;
+      shell.receiveShadow = true;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 0.16), shellMat);
+      back.position.set(0, 0.95, -0.36);
+      back.castShadow = true;
+      shell.add(back);
+      this.root.add(shell);
+      this.shell = shell;
     }
 
     this.eyeY = P.headY;
@@ -780,6 +806,43 @@ export class Entity {
       if (Math.abs(dxw) < CATCH_RANGE && !theo.hidden && !facingIt) {
         this.state = "seize";
         this.seizeT = 0;
+        this.vx = 0;
+      }
+      this.finishMove(dt, colliders, bounds, theo);
+      return;
+    }
+
+    // ── The Mimic ──
+    // It does not patrol, hunt or search. It is a chair. It stays a chair
+    // while you are anywhere else on the floor, and stops being one only when
+    // you are already too close to do anything about it.
+    if (this.sense === "mimic" && this.state !== "seize") {
+      const dxm = theo.position.x - this.root.position.x;
+      const near = Math.abs(dxm) < SENSE.mimic.range && !theo.hidden;
+      if (near && this.disguise > 0.5) this.justRevealed = true;
+      this.disguise = THREE.MathUtils.damp(this.disguise, near ? 0 : 1, near ? 9 : 1.2, dt);
+
+      if (this.shell) {
+        this.shell.visible = this.disguise > 0.04;
+        const d = this.disguise;
+        this.shell.scale.set(1, 0.4 + d * 0.6, 1);
+        this.shell.position.y = 0.58 * d;
+      }
+      // The body is inside the furniture until it is not.
+      this.waist.visible = this.disguise < 0.6;
+      this.legL.visible = this.legR.visible = this.disguise < 0.6;
+
+      if (this.disguise < 0.35) {
+        this.state = "hunt";
+        this.faceToward(theo.position.x);
+        this.vx = THREE.MathUtils.damp(
+          this.vx, Math.sign(dxm) * s.huntSpeed * depthScale(floor.floor), 6, dt
+        );
+        if (Math.abs(dxm) < CATCH_RANGE && !theo.hidden) {
+          this.state = "seize"; this.seizeT = 0; this.vx = 0;
+        }
+      } else {
+        this.state = "patrol";
         this.vx = 0;
       }
       this.finishMove(dt, colliders, bounds, theo);

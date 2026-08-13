@@ -50,6 +50,7 @@ export type SenseKind =
   | "proximity"   // 5 — the Blind Man: being sensed
   | "gaze"        // 4 — the Weeper: moves only when you are not facing it
   | "theft"       // 3 — the Collector: wants what you are carrying
+  | "mimic"       // 2 — the Mimic: it is one of the things in the room
   | "smell"
   | "echo"
   | "vibration"

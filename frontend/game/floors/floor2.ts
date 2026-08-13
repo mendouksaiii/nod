@@ -279,6 +279,31 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
   keyClue(group, 2, clueX, anchors.x, anchors.y, boundsFor);
 
   fills(group, [[5, 42], [19, 45], [36, 42], [51, 42], [66, 45], [84, 48]], 0x353b48);
+  // ── Decoy chairs ──
+  // The Mimic wears a covered chair. If it were the only one on the floor the
+  // trick would last exactly one run, so the room is furnished with the same
+  // chair over and over — identical geometry, identical material — and one of
+  // them is standing up.
+  {
+    const chairMat = new THREE.MeshStandardMaterial({ color: 0x2a2d38, roughness: 1 });
+    for (const cx of [21, 29.5, 38, 44.5, 53, 58.5, 66]) {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.85), chairMat);
+      seat.position.set(cx, 0.58, -1.4);
+      seat.castShadow = true;
+      seat.receiveShadow = true;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 0.16), chairMat);
+      back.position.set(cx, 1.53, -1.76);
+      back.castShadow = true;
+      group.add(seat, back);
+      colliders.push(
+        new THREE.Box3(
+          new THREE.Vector3(cx - 0.48, 0, -1.83),
+          new THREE.Vector3(cx + 0.48, 1.16, -0.97)
+        )
+      );
+    }
+  }
+
   scene.add(group);
 
   return {
@@ -288,7 +313,7 @@ export function buildFloor2(scene: THREE.Scene, seed: number): FloorBuild {
     camClamp: [5, 88],
     spawnX: 2.8, stairX: 91.3, unlocked: false, keySpot,
     entity: {
-      sense: "reflection", shape: "mirror",
+      sense: "mimic", shape: "mirror",
       waypoints: [16, 31, 47, 62, 70], dwellSeconds: 1.2, startIndex: 2,
       safeBelow: 12.5, safeAbove: 73,
     },
