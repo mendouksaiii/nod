@@ -3,7 +3,7 @@
 **A seven-floor house. The stairs only go down. The floors below you do not exist until you earn them — and that is enforced by cryptography, not by level design.**
 
 ▶ **Play: https://nod-house.vercel.app**
-📜 Contract: [`0x1761c998b09df0c21553a57f0477f082f31924fd`](https://sepolia.basescan.org/address/0x1761c998b09df0c21553a57f0477f082f31924fd) on Base Sepolia
+📜 Contract: [`0x00f2810ffc17482a2955027afc3f79c99bef700b`](https://sepolia.basescan.org/address/0x00f2810ffc17482a2955027afc3f79c99bef700b) on Base Sepolia
 🏆 Built for the Inco Summer Game Jam — **Inco Lightning** track
 
 ---
@@ -166,7 +166,7 @@ npm install --ignore-scripts
 
 ```bash
 NEXT_PUBLIC_NETWORK=testnet
-NEXT_PUBLIC_NODHOUSE_ADDRESS=0x1761c998b09df0c21553a57f0477f082f31924fd
+NEXT_PUBLIC_NODHOUSE_ADDRESS=0x00f2810ffc17482a2955027afc3f79c99bef700b
 ```
 
 ```bash

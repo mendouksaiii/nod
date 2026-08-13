@@ -38,3 +38,4 @@ coverage/
 contracts/cache/
 contracts/artifacts/
 contracts/typechain-types/
+frontend/tsconfig.tsbuildinfo

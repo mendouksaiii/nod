@@ -1,7 +1,7 @@
 # How NOD uses Inco in the core gameplay loop
 
 **Play:** https://nod-house.vercel.app
-**Contract:** [`0x1761c998b09df0c21553a57f0477f082f31924fd`](https://sepolia.basescan.org/address/0x1761c998b09df0c21553a57f0477f082f31924fd) — Base Sepolia
+**Contract:** [`0x00f2810ffc17482a2955027afc3f79c99bef700b`](https://sepolia.basescan.org/address/0x00f2810ffc17482a2955027afc3f79c99bef700b) — Base Sepolia
 **Track:** Inco Lightning
 
 ---
@@ -94,9 +94,16 @@ function _grantMarks(uint8 floor) internal {
 }
 ```
 
+**Their name is encrypted under the same rule.** When you wake, the house asks
+what to call you, and that name goes on-chain encrypted — held for the length of
+the run, copied onto your mark if the house keeps you, and granted to nobody but
+a child who reaches the floor you stopped on. An address is public forever and
+tells you nothing. A name is the thing that makes a mark on a wall land, so the
+name is the secret.
+
 So the shoes in the corridor and the warnings scratched into the plaster are
-**real players**, and the only way to read what someone left is to survive to
-where they died. You cannot browse it. You cannot scrape it. **The community
+**real players**, and the only way to read what someone left — or what they
+called themselves — is to survive to where they died. You cannot browse it. You cannot scrape it. **The community
 collectively cannot spoil the house**, because the house *is* the access-control
 boundary.
 
@@ -129,7 +136,7 @@ browser at 60fps.
 
 | Moment | Call | What Inco does |
 |---|---|---|
-| Waking | `enterHouse()` | mints the nursery's seed, granted to you alone |
+| Waking | `enterHouse(name)` | takes your name in encrypted, mints the nursery's seed, both granted to you alone |
 | Each descent | `descend(from)` | creates the floor below **only now**, and unseals the marks on it |
 | Being kept | `fallToNod(phrase, settled)` | writes your epitaph, encrypted, onto that floor's ring |
 | The door | `reachTheDoor()` | grants an ending that was granted to nobody at seal time |
