@@ -190,10 +190,20 @@ export default function Title() {
         const injected = connectors[0];
         if (!injected) throw new Error("no wallet found in this browser");
         connect({ connector: injected });
-        setMessage("waiting for your wallet…");
-        return; // the effect below picks it up once connected
       }
-      await beginRun();
+      // Never call beginRun() from here, even when isConnected is ALREADY true.
+      //
+      // isConnected flips the moment wagmi restores a previous session, but
+      // useWalletClient() is an async query that resolves several ticks later.
+      // Calling straight through meant a returning visitor — the common case,
+      // since the wallet is already authorised for the site — hit beginRun with
+      // walletClient still undefined and was told "the wallet connected but
+      // never handed over an account", which was true and completely useless.
+      //
+      // The effect below is the single entry point. It waits for all four
+      // values, and the watchdog underneath it covers the case where they
+      // never arrive.
+      setMessage("waiting for your wallet…");
     } catch (err: unknown) {
       setPhase("error");
       setMessage(err instanceof Error ? err.message : String(err));
@@ -250,9 +260,18 @@ export default function Title() {
     // into a waiting state, so bailing without saying why is what left it
     // hanging on "verifying" in the first place.
     if (!walletClient || !publicClient || !address) {
+      // This should now be unreachable — the effect is the only caller and it
+      // waits for all four. If it ever fires again, say WHICH piece is missing
+      // rather than the previous message, which was accurate and told nobody
+      // anything they could act on.
+      const missing = [
+        !address && "an account",
+        !walletClient && "a signer",
+        !publicClient && "an rpc connection",
+      ].filter(Boolean).join(", ");
       startedRef.current = false;
       setPhase("error");
-      setMessage("the wallet connected but never handed over an account.");
+      setMessage(`the wallet connected but never handed over ${missing}.`);
       return;
     }
     setPhase("waking");
