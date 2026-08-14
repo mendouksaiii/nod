@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useChainId, useConnect, useDisconnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
+import { useAccount, useConnect, useDisconnect, usePublicClient, useSwitchChain } from "wagmi";
 import { activeChain } from "@/lib/network";
+import { getWalletClient } from "@wagmi/core";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
+import { wagmiConfig } from "./Providers";
 import Backdrop from "./Backdrop";
 
 type Phase = "title" | "choose" | "connecting" | "naming" | "waking" | "verified" | "playing" | "error";
@@ -83,13 +85,16 @@ export default function Title() {
   const [booting, setBooting] = useState(false);
   const linkRef = useRef<HouseLink | null>(null);
 
-  const { address, isConnected, connector: activeConnector } = useAccount();
+  // chainId comes from useAccount, NOT useChainId. useChainId returns the
+  // CONFIG's chain (always base sepolia here), so comparing against it always
+  // said "already on the right chain" and skipped the switch — then the signer
+  // fetch failed because the wallet was really on mainnet. useAccount().chainId
+  // is the wallet's ACTUAL chain, which is the thing that has to be switched.
+  const { address, isConnected, connector: activeConnector, chainId } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
   const { disconnectAsync } = useDisconnect();
-  const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
 
   // Tear the game down if this component ever unmounts
   useEffect(() => () => gameRef.current?.dispose(), []);
@@ -289,7 +294,13 @@ export default function Title() {
    */
   useEffect(() => {
     if (phase !== "connecting") return;
-    if (!isConnected || !walletClient || !publicClient || !address) return;
+    // Deliberately does NOT wait for walletClient. That hook stays undefined
+    // for a wallet on the wrong chain, which is the common case and used to
+    // deadlock here: the chain switch lives in beginRun, but beginRun was
+    // gated on the very client the wrong chain could never produce. address is
+    // available the moment you connect, on any chain — that is enough to move
+    // on and do the switch ourselves.
+    if (!isConnected || !publicClient || !address) return;
     if (startedRef.current) return;
     startedRef.current = true;
     // The name is asked for HERE, once the wallet is actually in hand — not on
@@ -298,7 +309,7 @@ export default function Title() {
     // "what shall the house call you" the moment the house has hold of you.
     setPhase("naming");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isConnected, walletClient, publicClient, address]);
+  }, [phase, isConnected, publicClient, address]);
 
   // Any connector error ends the wait at once. Previously this was only read
   // by the watchdog below, so a wallet that refused instantly still left the
@@ -358,19 +369,15 @@ export default function Title() {
     // Never return silently from here — the caller has already put the screen
     // into a waiting state, so bailing without saying why is what left it
     // hanging on "verifying" in the first place.
-    if (!walletClient || !publicClient || !address) {
-      // This should now be unreachable — the effect is the only caller and it
-      // waits for all four. If it ever fires again, say WHICH piece is missing
-      // rather than the previous message, which was accurate and told nobody
-      // anything they could act on.
-      const missing = [
-        !address && "an account",
-        !walletClient && "a signer",
-        !publicClient && "an rpc connection",
-      ].filter(Boolean).join(", ");
+    // Note: walletClient is NOT required here. It is fetched imperatively
+    // below, AFTER the chain is switched, because the hook value stays
+    // undefined until the wallet is on a configured chain.
+    if (!publicClient || !address) {
       startedRef.current = false;
       setPhase("error");
-      setMessage(`the wallet connected but never handed over ${missing}.`);
+      setMessage(
+        `the wallet connected but never handed over ${!address ? "an account" : "an rpc connection"}.`
+      );
       return;
     }
     setPhase("waking");
@@ -389,13 +396,25 @@ export default function Title() {
       push("wallet", `${address.slice(0, 6)}…${address.slice(-4)}`);
 
       if (chainId !== activeChain.id) {
-        setMessage("this house is on base sepolia…");
+        setMessage("this house is on base sepolia — approve the switch…");
         await switchChainAsync({ chainId: activeChain.id });
       }
       push("network", activeChain.name);
 
+      // NOW fetch the signer, once we are provably on the right chain. This is
+      // the imperative equivalent of the useWalletClient hook, and it is what
+      // unwedges a wallet that connected on Ethereum mainnet: the hook could
+      // never build a client for that chain, but after the switch this can.
+      const signer = await getWalletClient(wagmiConfig, { chainId: activeChain.id });
+      if (!signer) {
+        throw new Error(
+          "the wallet is connected but would not hand over a signer for base sepolia. check it is unlocked."
+        );
+      }
+      push("signer", "ready");
+
       if (!HOUSE_ADDRESS) throw new Error("the house has no address configured");
-      const link = new HouseLink(publicClient as never, walletClient, address);
+      const link = new HouseLink(publicClient as never, signer, address);
 
       const sealed = await link.isSealed();
       if (!sealed) throw new Error("this house has not been sealed yet");
