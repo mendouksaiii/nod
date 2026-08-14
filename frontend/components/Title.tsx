@@ -6,7 +6,7 @@ import { activeChain } from "@/lib/network";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
 import Backdrop from "./Backdrop";
 
-type Phase = "title" | "choose" | "connecting" | "waking" | "verified" | "playing" | "error";
+type Phase = "title" | "choose" | "connecting" | "naming" | "waking" | "verified" | "playing" | "error";
 
 /** One line of the end-to-end wallet check shown before the run starts. */
 type Check = { label: string; detail: string; ok: boolean };
@@ -72,6 +72,8 @@ export default function Title() {
   const handOverRef = useRef<(() => void) | null>(null);
   /** Guards against beginRun being entered twice as wagmi's values land. */
   const startedRef = useRef(false);
+  /** Which door led to the naming screen — the chain, or offline. */
+  const namingThenRef = useRef<"online" | "offline">("online");
   /** The name he goes by. Kept for the memorial and the end-of-run card. */
   const [playerName, setPlayerName] = useState("");
   /** Every hop from wallet to gameplay, shown before you are let in. */
@@ -230,6 +232,7 @@ export default function Title() {
 
   async function wake() {
     startedRef.current = false; // so TRY AGAIN genuinely tries again
+    namingThenRef.current = "online";
     setPhase("connecting");
     setMessage("");
     try {
@@ -289,7 +292,11 @@ export default function Title() {
     if (!isConnected || !walletClient || !publicClient || !address) return;
     if (startedRef.current) return;
     startedRef.current = true;
-    void beginRun();
+    // The name is asked for HERE, once the wallet is actually in hand — not on
+    // the title screen. It goes on the on-chain memorial via enterHouse, so it
+    // has to be captured before that call, and it reads better to be asked
+    // "what shall the house call you" the moment the house has hold of you.
+    setPhase("naming");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, isConnected, walletClient, publicClient, address]);
 
@@ -327,10 +334,24 @@ export default function Title() {
    * to exist: without it, anyone with no wallet, no testnet ether or the
    * wrong network simply cannot play the game.
    */
+  /** The offline door also asks for a name first — it is used in-game and on
+   *  the end-of-run card even when nothing is written to the chain. */
   function startOffline() {
+    namingThenRef.current = "offline";
+    setPhase("naming");
+  }
+
+  /** Boot with no chain, after the name has been given. */
+  function beginOffline() {
     setStartWith({ link: null });
     setBooting(true);
     setPhase("playing");
+  }
+
+  /** The continue button on the naming screen runs whichever door led here. */
+  function nameGiven() {
+    if (namingThenRef.current === "offline") beginOffline();
+    else void beginRun();
   }
 
   async function beginRun() {
@@ -468,20 +489,6 @@ export default function Title() {
             <br />
             other children woke here before you. some of them are still here.
           </p>
-          {/* He has to be called something. It goes on the memorial. */}
-          <input
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value.slice(0, 18))}
-            placeholder="what shall the house call you?"
-            spellCheck={false}
-            style={{
-              marginTop: "1.2rem", padding: "0.6rem 1rem", width: "min(22rem, 80vw)",
-              background: "rgba(255,255,255,0.03)", color: "#c8d2be", textAlign: "center",
-              border: "1px solid rgba(200,210,190,0.22)", fontFamily: "Georgia, serif",
-              fontSize: "0.9rem", letterSpacing: "0.06em", outline: "none",
-            }}
-          />
-
           <button style={button} onClick={() => void wake()}>
             WAKE UP
           </button>
@@ -587,6 +594,43 @@ export default function Title() {
           <button style={button} onClick={enterVerified}>
             GO DOWN
           </button>
+        </>
+      )}
+
+      {phase === "naming" && (
+        <>
+          <p style={{ opacity: 0.8, fontSize: "0.9rem", marginTop: "1.2rem", maxWidth: "28rem", lineHeight: 1.8 }}>
+            {namingThenRef.current === "offline"
+              ? "the house will not remember you. still —"
+              : "the house has hold of you now."}
+          </p>
+          <input
+            value={playerName}
+            autoFocus
+            onChange={(e) => setPlayerName(e.target.value.slice(0, 18))}
+            onKeyDown={(e) => { if (e.key === "Enter" && playerName.trim()) nameGiven(); }}
+            placeholder="what shall the house call you?"
+            spellCheck={false}
+            style={{
+              marginTop: "0.6rem", padding: "0.6rem 1rem", width: "min(22rem, 80vw)",
+              background: "rgba(255,255,255,0.04)", color: "#c8d2be", textAlign: "center",
+              border: "1px solid rgba(200,210,190,0.28)", fontFamily: "Georgia, serif",
+              fontSize: "0.95rem", letterSpacing: "0.06em", outline: "none",
+            }}
+          />
+          <button
+            style={{ ...button, opacity: playerName.trim() ? 1 : 0.4 }}
+            disabled={!playerName.trim()}
+            onClick={() => nameGiven()}
+          >
+            STEP INSIDE
+          </button>
+          {namingThenRef.current === "online" && (
+            <p style={{ opacity: 0.5, fontSize: "0.7rem", marginTop: "0.7rem", maxWidth: "24rem", lineHeight: 1.7 }}>
+              this name is sealed to the floor you fall on, encrypted. only a
+              child who reaches it can read it.
+            </p>
+          )}
         </>
       )}
 
