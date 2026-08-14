@@ -6,7 +6,7 @@ import { activeChain } from "@/lib/network";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
 import Backdrop from "./Backdrop";
 
-type Phase = "title" | "connecting" | "waking" | "verified" | "playing" | "error";
+type Phase = "title" | "choose" | "connecting" | "waking" | "verified" | "playing" | "error";
 
 /** One line of the end-to-end wallet check shown before the run starts. */
 type Check = { label: string; detail: string; ok: boolean };
@@ -181,45 +181,69 @@ export default function Title() {
     return () => { cancelled = true; };
   }, [phase, startWith, playerName]);
 
+  /**
+   * The wallets worth offering.
+   *
+   * The generic `injected` entry is a shim for whatever claimed window.ethereum
+   * and duplicates a named wallet in the list whenever discovery worked, so it
+   * is only offered when nothing announced itself.
+   */
+  function pickable(list: readonly typeof connectors[number][]) {
+    const named = list.filter((c) => c.id !== "injected");
+    return named.length ? named : list.slice();
+  }
+
+  /** Ask one specific wallet, and say which one is being asked. */
+  function connectWith(target: (typeof connectors)[number]) {
+    startedRef.current = false;
+    setPhase("connecting");
+    setMessage(`asking ${target.name}…`);
+    // connect() is fire-and-forget in wagmi v2 — a rejection lands in
+    // connectError, not here — so the failure path is wired explicitly.
+    connect(
+      { connector: target },
+      {
+        onError: (e) => {
+          setPhase("error");
+          setMessage(
+            /reject|denied|user/i.test(e.message)
+              ? "you closed the wallet. nothing has been signed."
+              : e.message
+          );
+        },
+      }
+    );
+  }
+
   async function wake() {
     startedRef.current = false; // so TRY AGAIN genuinely tries again
     setPhase("connecting");
     setMessage("");
     try {
       if (!isConnected) {
-        // Do NOT gate on window.ethereum.
+        // Ask which wallet. Do not guess.
         //
-        // wagmi has EIP-6963 discovery on by default and most current wallets
-        // announce themselves that way WITHOUT necessarily setting
-        // window.ethereum. The check I added here was rejecting real wallets
-        // before they were ever asked — it turned a working wallet into "no
-        // wallet in this browser".
+        // Every automatic pick here has been wrong for somebody. window.ethereum
+        // rejected wallets that only announce over EIP-6963; then "prefer a
+        // discovered wallet over the generic injected shim" grabbed the FIRST
+        // announced one, which on a machine with five wallets installed was
+        // Keplr — a Cosmos wallet — being asked for a Base Sepolia account. It
+        // never answered, and the run died on a timeout.
         //
-        // Prefer a wallet that actually announced itself over the generic
-        // injected shim, which is a fallback and may target nothing.
-        const discovered = connectors.filter((c) => c.id !== "injected");
-        const target = discovered[0] ?? connectors[0];
-        if (!target) {
+        // There is no ordering that is right for everyone. The person at the
+        // keyboard knows which wallet they meant; nobody else does.
+        const usable = pickable(connectors);
+        if (!usable.length) {
           throw new Error(
             "no wallet found in this browser. install one, or go in without being remembered."
           );
         }
-        setMessage(`asking ${target.name}…`);
-        // connect() is fire-and-forget in wagmi v2 — a rejection lands in
-        // connectError, not here — so the failure path is wired explicitly.
-        connect(
-          { connector: target },
-          {
-            onError: (e) => {
-              setPhase("error");
-              setMessage(
-                /reject|denied|user/i.test(e.message)
-                  ? "you closed the wallet. nothing has been signed."
-                  : e.message
-              );
-            },
-          }
-        );
+        if (usable.length === 1) {
+          connectWith(usable[0]);
+          return;
+        }
+        setPhase("choose");
+        return;
       }
       // Never call beginRun() from here, even when isConnected is ALREADY true.
       //
@@ -551,6 +575,36 @@ export default function Title() {
           </div>
           <button style={button} onClick={enterVerified}>
             GO DOWN
+          </button>
+        </>
+      )}
+
+      {phase === "choose" && (
+        <>
+          <p style={{ opacity: 0.78, fontSize: "0.86rem", marginTop: "1.2rem" }}>
+            which wallet?
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.4rem" }}>
+            {pickable(connectors).map((c) => (
+              <button
+                key={c.uid}
+                style={{ ...button, marginTop: 0, fontSize: "0.85rem", padding: "0.6rem 2rem" }}
+                onClick={() => connectWith(c)}
+              >
+                {c.name.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <p style={{ opacity: 0.5, fontSize: "0.72rem", marginTop: "1rem", maxWidth: "26rem", lineHeight: 1.7 }}>
+            it needs an ethereum wallet on base sepolia. a cosmos or solana
+            wallet will be asked and will not answer.
+          </p>
+          <button
+            style={{ ...button, marginTop: "1rem", fontSize: "0.72rem", padding: "0.4rem 1.2rem",
+                     letterSpacing: "0.2em", opacity: 0.7, border: "none" }}
+            onClick={() => setPhase("title")}
+          >
+            BACK
           </button>
         </>
       )}
