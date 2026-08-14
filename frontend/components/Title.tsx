@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useChainId, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
+import { useAccount, useChainId, useConnect, useDisconnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { activeChain } from "@/lib/network";
 import { HouseLink, HOUSE_ADDRESS } from "@/game/chain";
 import Backdrop from "./Backdrop";
@@ -81,8 +81,9 @@ export default function Title() {
   const [booting, setBooting] = useState(false);
   const linkRef = useRef<HouseLink | null>(null);
 
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector: activeConnector } = useAccount();
   const { connect, connectors, error: connectError } = useConnect();
+  const { disconnectAsync } = useDisconnect();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const publicClient = usePublicClient();
@@ -194,10 +195,22 @@ export default function Title() {
   }
 
   /** Ask one specific wallet, and say which one is being asked. */
-  function connectWith(target: (typeof connectors)[number]) {
+  async function connectWith(target: (typeof connectors)[number]) {
     startedRef.current = false;
     setPhase("connecting");
     setMessage(`asking ${target.name}…`);
+
+    // If a stale wallet is already connected — the persisted one from a failed
+    // attempt, often the WRONG chain's wallet — connecting a different one
+    // silently no-ops in wagmi. Drop the old session first so the new choice
+    // actually takes. Choosing the already-connected wallet just proceeds.
+    if (isConnected && activeConnector?.uid !== target.uid) {
+      await disconnectAsync().catch(() => {});
+    } else if (isConnected && activeConnector?.uid === target.uid) {
+      setMessage("waiting for your wallet…");
+      return; // the effect below already has this connection
+    }
+
     // connect() is fire-and-forget in wagmi v2 — a rejection lands in
     // connectError, not here — so the failure path is wired explicitly.
     connect(
@@ -220,44 +233,42 @@ export default function Title() {
     setPhase("connecting");
     setMessage("");
     try {
-      if (!isConnected) {
-        // Ask which wallet. Do not guess.
-        //
-        // Every automatic pick here has been wrong for somebody. window.ethereum
-        // rejected wallets that only announce over EIP-6963; then "prefer a
-        // discovered wallet over the generic injected shim" grabbed the FIRST
-        // announced one, which on a machine with five wallets installed was
-        // Keplr — a Cosmos wallet — being asked for a Base Sepolia account. It
-        // never answered, and the run died on a timeout.
-        //
-        // There is no ordering that is right for everyone. The person at the
-        // keyboard knows which wallet they meant; nobody else does.
-        const usable = pickable(connectors);
-        if (!usable.length) {
-          throw new Error(
-            "no wallet found in this browser. install one, or go in without being remembered."
-          );
-        }
-        if (usable.length === 1) {
-          connectWith(usable[0]);
-          return;
-        }
-        setPhase("choose");
+      // Ask which wallet. Do not guess, and do NOT gate this on !isConnected.
+      //
+      // Every automatic pick here has been wrong for somebody. window.ethereum
+      // rejected wallets that only announce over EIP-6963; then "prefer a
+      // discovered wallet over the generic injected shim" grabbed the FIRST
+      // announced one, which on a machine with five wallets installed was
+      // Keplr — a Cosmos wallet — being asked for a Base Sepolia account.
+      //
+      // And gating on !isConnected meant that once that wrong wallet was
+      // connected, wagmi PERSISTED it: on the next load isConnected was already
+      // true, so the picker was skipped and the stale Keplr session was reused
+      // forever with no way to change it. So the picker must be reachable even
+      // when something is already connected.
+      const usable = pickable(connectors);
+      if (!usable.length) {
+        throw new Error(
+          "no wallet found in this browser. install one, or go in without being remembered."
+        );
+      }
+      // One wallet, already connected: nothing to choose, go straight through.
+      if (usable.length === 1 && isConnected) {
+        setMessage("waiting for your wallet…");
         return;
       }
-      // Never call beginRun() from here, even when isConnected is ALREADY true.
+      if (usable.length === 1) {
+        void connectWith(usable[0]);
+        return;
+      }
+      // More than one wallet: always let the person choose, even if a stale
+      // one is connected. The keyboard knows which they meant; nobody else does.
       //
-      // isConnected flips the moment wagmi restores a previous session, but
-      // useWalletClient() is an async query that resolves several ticks later.
-      // Calling straight through meant a returning visitor — the common case,
-      // since the wallet is already authorised for the site — hit beginRun with
-      // walletClient still undefined and was told "the wallet connected but
-      // never handed over an account", which was true and completely useless.
-      //
-      // The effect below is the single entry point. It waits for all four
-      // values, and the watchdog underneath it covers the case where they
-      // never arrive.
-      setMessage("waiting for your wallet…");
+      // Once a wallet is chosen and connected, the effect below is the single
+      // entry point into beginRun: it waits for isConnected, walletClient,
+      // publicClient and address to all land (they arrive on different ticks),
+      // and the watchdog underneath covers the case where they never do.
+      setPhase("choose");
     } catch (err: unknown) {
       setPhase("error");
       setMessage(err instanceof Error ? err.message : String(err));
@@ -585,15 +596,23 @@ export default function Title() {
             which wallet?
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.4rem" }}>
-            {pickable(connectors).map((c) => (
-              <button
-                key={c.uid}
-                style={{ ...button, marginTop: 0, fontSize: "0.85rem", padding: "0.6rem 2rem" }}
-                onClick={() => connectWith(c)}
-              >
-                {c.name.toUpperCase()}
-              </button>
-            ))}
+            {pickable(connectors).map((c) => {
+              const isActive = isConnected && activeConnector?.uid === c.uid;
+              return (
+                <button
+                  key={c.uid}
+                  style={{ ...button, marginTop: 0, fontSize: "0.85rem", padding: "0.6rem 2rem" }}
+                  onClick={() => void connectWith(c)}
+                >
+                  {c.name.toUpperCase()}
+                  {isActive && (
+                    <span style={{ opacity: 0.55, fontWeight: 400, marginLeft: "0.6rem", fontSize: "0.7rem" }}>
+                      · connected
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           <p style={{ opacity: 0.5, fontSize: "0.72rem", marginTop: "1rem", maxWidth: "26rem", lineHeight: 1.7 }}>
             it needs an ethereum wallet on base sepolia. a cosmos or solana
