@@ -370,13 +370,7 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes",
-        "name": "encryptedName",
-        "type": "bytes"
-      }
-    ],
+    "inputs": [],
     "name": "enterHouse",
     "outputs": [],
     "stateMutability": "payable",
@@ -386,8 +380,13 @@
     "inputs": [
       {
         "internalType": "bytes",
-        "name": "encryptedPhrase",
+        "name": "encryptedName",
         "type": "bytes"
+      },
+      {
+        "internalType": "uint8",
+        "name": "warning",
+        "type": "uint8"
       },
       {
         "internalType": "bool",
@@ -440,9 +439,9 @@
         "type": "uint64[]"
       },
       {
-        "internalType": "euint256[]",
-        "name": "epitaphs",
-        "type": "bytes32[]"
+        "internalType": "uint8[]",
+        "name": "warnings",
+        "type": "uint8[]"
       },
       {
         "internalType": "euint256[]",

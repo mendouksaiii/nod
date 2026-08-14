@@ -54,22 +54,28 @@ contract NodHouse is Ownable2Step {
         address child;
         uint64 at;
         uint8 floor;
-        euint256 epitaph;
         /**
-         * What the child called themselves, encrypted.
+         * Which warning they left — a PLAIN index into `phrases`, not encrypted.
          *
-         * It lives under exactly the same rule as the epitaph: granted only to
-         * someone who reaches the floor where this child stopped. An address is
-         * public forever and tells you nothing; a name is the thing that makes
-         * a mark on the wall land. So the name is the secret, and the only way
-         * to learn it is to get as deep as they did.
+         * The name below is the secret worth hiding; the warning is one of a
+         * short fixed list and costs nothing to reveal. Keeping it plain is not
+         * only simpler, it is necessary: every Inco encrypted-value creation is
+         * heavy, and doing TWO in one transaction (a name AND a warning) is what
+         * pushed enterHouse over Base's per-transaction gas limit. One encrypted
+         * value per transaction is the rule that keeps every call callable.
+         */
+        uint8 warning;
+        /**
+         * What the child called themselves, encrypted. Granted only to someone
+         * who reaches the floor where this child stopped — an address is public
+         * forever and says nothing; the name is the thing that makes a mark on
+         * the wall land, so the name is the secret and the only way to learn it
+         * is to get as deep as they did.
          */
         euint256 name;
     }
 
     mapping(address => Run) public runs;
-    /// child => the name they gave the house, encrypted
-    mapping(address => euint256) private _nameOf;
     /// child => floor => that floor's encrypted layout seed
     mapping(address => mapping(uint8 => euint256)) private _floorSeed;
     /// floor => ring of the last MARKS_PER_FLOOR children kept there
@@ -194,19 +200,9 @@ contract NodHouse is Ownable2Step {
      * @dev Mints only floor 7's seed. The floors below do not exist for you
      *      yet, in the strongest sense available: they have not been created.
      */
-    /**
-     * @param encryptedName The name you give the house, encrypted client-side.
-     *        Held for the length of the run and copied onto your mark if you
-     *        are kept. Never granted to anyone but you until then.
-     */
-    function enterHouse(bytes calldata encryptedName) external payable {
+    function enterHouse() external payable {
         if (!sealed_) revert NotSealed();
         _requireFee();
-
-        euint256 given = e.newEuint256(encryptedName, msg.sender);
-        e.allowThis(given);
-        e.allow(given, msg.sender); // you can always read your own name
-        _nameOf[msg.sender] = given;
 
         runs[msg.sender] = Run({
             active: true,
@@ -247,31 +243,37 @@ contract NodHouse is Ownable2Step {
 
     /**
      * @notice The house keeps you — taken by a warden, or you chose to stay.
-     * @param encryptedPhrase An encrypted index into `phrases`, produced
-     *        client-side. Even which warning you left is hidden until someone
-     *        is standing where you fell.
+     * @param encryptedName The name to leave on the wall, encrypted client-side.
+     *        This is the one encrypted value the call creates — keeping it to a
+     *        single Inco value-creation per transaction is what keeps the call
+     *        under Base's gas limit.
+     * @param warning A plain index into `phrases` — the warning left for the
+     *        next child. Not hidden; it is one of a short fixed list.
      * @param settled True if you walked into one of the warm rooms on the
      *        ground floor rather than being caught. The house prefers this.
      */
-    function fallToNod(bytes calldata encryptedPhrase, bool settled) external payable {
+    function fallToNod(bytes calldata encryptedName, uint8 warning, bool settled)
+        external
+        payable
+    {
         Run storage run = runs[msg.sender];
         if (run.startedAt == 0) revert NoRun();
         if (!run.active) revert RunOver();
         _requireFee();
 
         uint8 floor = run.floor;
-        euint256 epitaph = e.newEuint256(encryptedPhrase, msg.sender);
-        e.allowThis(epitaph);
-        // You can always read your own last words.
-        e.allow(epitaph, msg.sender);
+        euint256 name = e.newEuint256(encryptedName, msg.sender);
+        e.allowThis(name);
+        // You can always read the name you left.
+        e.allow(name, msg.sender);
 
         uint8 slot = _markCursor[floor];
         _marks[floor][slot] = Mark({
             child: msg.sender,
             at: uint64(block.timestamp),
             floor: floor,
-            epitaph: epitaph,
-            name: _nameOf[msg.sender]
+            warning: warning,
+            name: name
         });
         _markCursor[floor] = (slot + 1) % MARKS_PER_FLOOR;
         markTotal[floor]++;
@@ -312,15 +314,10 @@ contract NodHouse is Ownable2Step {
         _floorSeed[msg.sender][floor] = seed;
     }
 
-    /// Let a newly-arrived child read the epitaphs left on this floor.
+    /// Let a newly-arrived child read the names left on this floor.
     function _grantMarks(uint8 floor) internal {
         Mark[8] storage ring = _marks[floor];
         for (uint8 i = 0; i < MARKS_PER_FLOOR; i++) {
-            euint256 ep = ring[i].epitaph;
-            if (euint256.unwrap(ep) != 0) {
-                e.allow(ep, msg.sender);
-            }
-            // The name is granted on the same terms as the last words.
             euint256 nm = ring[i].name;
             if (euint256.unwrap(nm) != 0) {
                 e.allow(nm, msg.sender);
@@ -348,7 +345,7 @@ contract NodHouse is Ownable2Step {
         returns (
             address[] memory children,
             uint64[] memory times,
-            euint256[] memory epitaphs,
+            uint8[] memory warnings,
             euint256[] memory names
         )
     {
@@ -360,7 +357,7 @@ contract NodHouse is Ownable2Step {
 
         children = new address[](n);
         times = new uint64[](n);
-        epitaphs = new euint256[](n);
+        warnings = new uint8[](n);
         names = new euint256[](n);
 
         uint8 j = 0;
@@ -368,7 +365,7 @@ contract NodHouse is Ownable2Step {
             if (ring[i].child == address(0)) continue;
             children[j] = ring[i].child;
             times[j] = ring[i].at;
-            epitaphs[j] = ring[i].epitaph;
+            warnings[j] = ring[i].warning;
             names[j] = ring[i].name;
             j++;
         }

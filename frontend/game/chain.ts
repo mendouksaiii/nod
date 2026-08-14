@@ -147,14 +147,14 @@ export class HouseLink {
    * Packed big-endian into the low bytes of a uint256, so up to 31 characters
    * survive the round trip. Empty is allowed; the house just never learns it.
    */
-  async enterHouse(name = "") {
-    const zap = await this.inco();
-    const enc = await zap.encrypt(packName(name), {
-      accountAddress: this.account,
-      dappAddress: HOUSE_ADDRESS,
-      handleType: (await import("@inco/lightning-js")).handleTypes.euint256,
-    });
-    await this.write("enterHouse", [enc], await this.fee());
+  async enterHouse() {
+    // Deliberately lean: no encrypted value here, only the seed the contract
+    // mints internally. enterHouse used to encrypt the name too, and that
+    // second encrypted operation pushed the transaction over Base Sepolia's
+    // per-transaction gas limit — it reverted every time. The name is
+    // encrypted at fallToNod instead, where it is the only encrypted value in
+    // the call.
+    await this.write("enterHouse", [], await this.fee());
   }
 
   /** Go down. Mints the floor below and hands over its walls. */
@@ -162,15 +162,23 @@ export class HouseLink {
     await this.write("descend", [from], await this.fee());
   }
 
-  /** The house keeps you — taken, or you chose to stay. */
-  async fallToNod(phraseIndex: number, settled: boolean) {
+  /**
+   * The house keeps you — taken, or you chose to stay.
+   *
+   * This is where your NAME is written to the wall, encrypted, and it is the
+   * one encrypted value the transaction creates. The warning you leave is a
+   * plain index into a fixed list — public, because it is one of a handful of
+   * fixed phrases, and because a second encrypted value here would overrun the
+   * gas limit exactly as it did in enterHouse.
+   */
+  async fallToNod(name: string, warningIndex: number, settled: boolean) {
     const zap = await this.inco();
-    const enc = await zap.encrypt(BigInt(phraseIndex), {
+    const enc = await zap.encrypt(packName(name), {
       accountAddress: this.account,
       dappAddress: HOUSE_ADDRESS,
       handleType: (await import("@inco/lightning-js")).handleTypes.euint256,
     });
-    await this.write("fallToNod", [enc, settled], await this.fee());
+    await this.write("fallToNod", [enc, warningIndex, settled], await this.fee());
   }
 
   /** Open the last door. Returns the ending text the house was holding. */
@@ -198,22 +206,22 @@ export class HouseLink {
 
   /** Who the house kept on this floor, and what they left — if we may read it. */
   async marksOn(floor: number): Promise<Mark[]> {
-    const [children, times, epitaphs, names] = (await this.read("marksOn", [floor])) as [
+    const [children, times, warnings, names] = (await this.read("marksOn", [floor])) as [
       Address[],
       bigint[],
-      (bigint | string)[],
+      number[],
       (bigint | string)[]
     ];
     const out: Mark[] = [];
     for (let i = 0; i < children.length; i++) {
-      const phrase = await this.tryDecrypt(epitaphs[i]);
-      // Null here is the normal case, not an error: it means the house has
+      // The warning is a plain index now — no decrypt. The NAME is the secret,
+      // and null here is the normal case, not an error: it means the house has
       // not granted us this child's name because we have not got that far.
       const packed = await this.tryDecrypt(names[i]);
       out.push({
         child: children[i],
         at: Number(times[i]),
-        phrase: phrase === null ? null : Number(phrase),
+        phrase: Number(warnings[i]),
         name: packed === null ? null : unpackName(packed),
       });
     }

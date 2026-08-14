@@ -15,9 +15,9 @@ import { FOUND_TEXT, WREN_PAGES } from "./build";
  */
 export interface HouseBridge {
   floorSeed(floor: number): Promise<bigint | null>;
-  enterHouse(name: string): Promise<void>;
+  enterHouse(): Promise<void>;
   descend(from: number): Promise<void>;
-  fallToNod(phraseIndex: number, settled: boolean): Promise<void>;
+  fallToNod(name: string, warningIndex: number, settled: boolean): Promise<void>;
   reachTheDoor(): Promise<string>;
   marksOn(floor: number): Promise<{ child: string; at: number; phrase: number | null; name: string | null }[]>;
   phrases(): Promise<string[]>;
@@ -1012,7 +1012,7 @@ export class NodGame {
       this.busyWithChain = true;
       const phrase = FLOOR_PHRASE[this.floorNumber] ?? 0;
       this.bridge
-        .fallToNod(phrase, false)
+        .fallToNod(this.playerName, phrase, false)
         .catch(() => { /* keep the game playable if the write fails */ })
         .finally(() => { this.busyWithChain = false; });
     }
@@ -1106,7 +1106,7 @@ export class NodGame {
     this.busyWithChain = true;
     this.showCard("waking", "the house learns your name…", 0);
     try {
-      await this.bridge.enterHouse(this.playerName);
+      await this.bridge.enterHouse();
       await this.loadFloor(TOP_FLOOR);
       this.runOver = false;
       this.dying = false;
@@ -1140,7 +1140,7 @@ export class NodGame {
     if (this.bridge && !this.busyWithChain) {
       this.busyWithChain = true;
       this.bridge
-        .fallToNod(FLOOR_PHRASE[1] ?? 7, true)
+        .fallToNod(this.playerName, FLOOR_PHRASE[1] ?? 7, true)
         .catch(() => {})
         .finally(() => { this.busyWithChain = false; });
     }
